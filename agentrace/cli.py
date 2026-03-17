@@ -108,7 +108,9 @@ def cmd_projects():
 
 def cmd_sessions(project: str | None = None):
     """List sessions with numbers, slugs, tokens, and duration."""
-    sessions = _get_sessions(project)
+    with Spinner("Loading sessions"):
+        sessions = _get_sessions(project)
+
     if not sessions:
         print("No sessions found.")
         if not project:
@@ -116,20 +118,60 @@ def cmd_sessions(project: str | None = None):
         return
 
     scope = _short(project) if project else "all projects"
-    print(f"\nSessions — {scope}\n")
-    print(f"{'#':<5} {'DATE':<12} {'SLUG':<30} {'MODEL':<18} {'FILES':>5} {'TOKENS':>10} {'COST':>8} {'MIN':>5}")
-    print("-" * 100)
+    total_tokens = sum(s.usage.total for s in sessions)
+    total_cost = sum(session_cost(s) for s in sessions)
+    max_tok = max(s.usage.total for s in sessions) or 1
+
+    print()
+    print(box(
+        f"📋  Sessions  {scope}",
+        f"{len(sessions)} sessions  ·  {fmt_tokens(total_tokens)} tokens  ·  {fmt_cost(total_cost)} total",
+    ))
+
+    # Column header (widths: # 5, DATE 12, SLUG 32, FILES 5, bar+tok 16, COST 9, MIN 4)
+    print(f"  {DIM}{'#':<5}  {'DATE':<12}  {'SLUG':<32}  {'FILES':>5}  {'':9}{'TOKENS':>7}  {'COST':>9}  {'MIN':>4}{RESET}")
+    print(rule(78))
 
     for i, s in enumerate(sessions, 1):
         duration = f"{s.duration_seconds / 60:.0f}" if s.duration_seconds else "?"
-        model_short = (s.model or "?").replace("claude-", "").replace("anthropic/", "")
-        slug = s.slug[:28] if s.slug else f"({s.session_id[:8]})"
-        cost = fmt_cost(session_cost(s))
-        print(
-            f"#{i:<4} {s.date:<12} {slug:<30} {model_short[:16]:<18} "
-            f"{len(s.unique_files):>5} {_fmt_tokens(s.usage.total):>10} {cost:>8} {duration:>5}"
-        )
-    print(f"\nTip: use the # to reference a session  →  agentrace show 1  |  agentrace compare 1 3\n")
+
+        # # column — BOLD CYAN, padded to 5 visual chars
+        num_str = f"#{i}"
+        num_display = f"{BOLD}{CYAN}{num_str:<5}{RESET}"
+
+        # DATE — DIM
+        date_display = f"{DIM}{(s.date or '?'):<12}{RESET}"
+
+        # SLUG — real slug normal; UUID-only DIM parens, padded to 32
+        if s.slug:
+            slug_str = s.slug[:30]
+            slug_display = f"{slug_str:<32}"
+        else:
+            inner = f"({s.session_id[:8]})"
+            slug_display = f"{DIM}{inner}{RESET}" + " " * (32 - len(inner))
+
+        # FILES — right-aligned to 5
+        files_display = f"{len(s.unique_files):>5}"
+
+        # TOKENS — mini_bar (width 8) + BOLD colored token count (right-aligned to 7)
+        tok = s.usage.total
+        tok_color = GREEN if tok < 500_000 else (YELLOW if tok < 2_000_000 else RED)
+        tok_str = fmt_tokens(tok)
+        bar = mini_bar(tok / max_tok, width=8)
+        tok_display = f"{bar} {BOLD}{tok_color}{tok_str:>7}{RESET}"
+
+        # COST — BOLD GOLD, right-aligned to 9
+        cost_str = fmt_cost(session_cost(s))
+        cost_display = f"{BOLD}{GOLD}{cost_str:>9}{RESET}"
+
+        # MIN — DIM, right-aligned to 4
+        dur_display = f"{DIM}{duration:>4}{RESET}"
+
+        print(f"  {num_display}  {date_display}  {slug_display}  {files_display}  {tok_display}  {cost_display}  {dur_display}")
+
+    print()
+    print(f"  {DIM}agentrace show 1  ·  agentrace compare 2 5  ·  agentrace watch{RESET}")
+    print()
 
 
 def cmd_show(ref: str, project: str | None = None):
@@ -335,7 +377,9 @@ def cmd_stats(project: str | None = None):
 
 def cmd_compare(ref_a: str, ref_b: str, project: str | None = None):
     """Diff two sessions side by side."""
-    sessions = _get_sessions(project)
+    with Spinner("Comparing sessions"):
+        sessions = _get_sessions(project)
+
     a = _resolve(ref_a, sessions)
     b = _resolve(ref_b, sessions)
     if not a or not b:
@@ -343,88 +387,165 @@ def cmd_compare(ref_a: str, ref_b: str, project: str | None = None):
 
     idx_a = sessions.index(a) + 1
     idx_b = sessions.index(b) + 1
-    label_a = f"#{idx_a} {a.slug or a.session_id[:8]}"
-    label_b = f"#{idx_b} {b.slug or b.session_id[:8]}"
 
-    print(f"\n── Compare")
-    print(f"   A: {label_a}  ({a.date})")
-    print(f"   B: {label_b}  ({b.date})")
+    def _slug_label(s, idx):
+        slug = s.slug or s.session_id[:8]
+        if len(slug) > 22:
+            slug = slug[:19] + "..."
+        return f"#{idx} {slug} ({s.date})"
 
-    print(f"\n── Tokens              {'A':>12}  {'B':>12}  {'DELTA':>12}")
-    print(f"   {'─' * 52}")
+    label_a = _slug_label(a, idx_a)
+    label_b = _slug_label(b, idx_b)
 
-    def row(label: str, va: int, vb: int, lower_is_better: bool = True):
-        delta = _token_delta(va, vb)
-        if va == vb:
-            flag = ""
-        elif (vb < va) == lower_is_better:
-            flag = " ✓"
-        else:
-            flag = " ✗"
-        print(f"   {label:<18}  {va:>12,}  {vb:>12,}  {delta:>12}{flag}")
+    print()
+    print(box(
+        "⚖️   Compare",
+        f"A: {label_a}  ·  B: {label_b}",
+    ))
 
-    row("Total", a.usage.total, b.usage.total)
-    row("Input (fresh)", a.usage.input_tokens, b.usage.input_tokens)
-    row("Cache created", a.usage.cache_creation_tokens, b.usage.cache_creation_tokens)
-    row("Cache hits", a.usage.cache_read_tokens, b.usage.cache_read_tokens, lower_is_better=False)
-    row("Output", a.usage.output_tokens, b.usage.output_tokens)
+    # ── Token table ──────────────────────────────────────────────────────────
+    print(section("Tokens"))
+    print(f"  {DIM}  {'':18}  {'A':>12}  {'B':>12}  {'':12}  {'DELTA':>12}{RESET}")
+    print(rule(72))
 
     cost_a = session_cost(a)
     cost_b = session_cost(b)
+    a_cache = (a.usage.cache_read_tokens / a.usage.total_input * 100) if a.usage.total_input else 0
+    b_cache = (b.usage.cache_read_tokens / b.usage.total_input * 100) if b.usage.total_input else 0
+
+    def _delta_bar(va: float, vb: float) -> str:
+        max_val = max(abs(va), abs(vb)) if max(abs(va), abs(vb)) > 0 else 1
+        fraction = min(1.0, abs(vb - va) / max_val)
+        return mini_bar(fraction, width=10)
+
+    def int_row(label: str, va: int, vb: int, lower_is_better: bool = True):
+        delta = vb - va
+        if va == vb:
+            delta_str = "—"
+            delta_color = DIM
+            flag = ""
+        else:
+            favorable = (vb < va) == lower_is_better
+            sign = "+" if delta > 0 else ""
+            delta_str = f"{sign}{delta:,}"
+            delta_color = GREEN if favorable else RED
+            flag = f"  {delta_color}{'✓' if favorable else '✗'}{RESET}"
+        bar = _delta_bar(va, vb)
+        print(
+            f"   {label:<18}  {BOLD}{va:>12,}{RESET}  {BOLD}{vb:>12,}{RESET}"
+            f"  {bar}  {BOLD}{delta_color}{delta_str:>12}{RESET}{flag}"
+        )
+
+    int_row("Total", a.usage.total, b.usage.total)
+    int_row("Input (fresh)", a.usage.input_tokens, b.usage.input_tokens)
+    int_row("Cache created", a.usage.cache_creation_tokens, b.usage.cache_creation_tokens)
+    int_row("Cache hits", a.usage.cache_read_tokens, b.usage.cache_read_tokens, lower_is_better=False)
+    int_row("Output", a.usage.output_tokens, b.usage.output_tokens)
+
+    # Est. cost row — A and B in GOLD
     cost_delta = cost_b - cost_a
     if cost_delta < 0:
         cost_delta_str = f"-{fmt_cost(abs(cost_delta))}"
-        cost_flag = " ✓"
+        cost_delta_color = GREEN
+        cost_flag = f"  {GREEN}✓{RESET}"
     elif cost_delta > 0:
         cost_delta_str = f"+{fmt_cost(cost_delta)}"
-        cost_flag = " ✗"
+        cost_delta_color = RED
+        cost_flag = f"  {RED}✗{RESET}"
     else:
         cost_delta_str = "—"
+        cost_delta_color = DIM
         cost_flag = ""
-    print(f"   {'Est. cost':<18}  {fmt_cost(cost_a):>12}  {fmt_cost(cost_b):>12}  {cost_delta_str:>12}{cost_flag}")
+    bar = _delta_bar(cost_a, cost_b)
+    print(
+        f"   {'Est. cost':<18}  {BOLD}{GOLD}{fmt_cost(cost_a):>12}{RESET}"
+        f"  {BOLD}{GOLD}{fmt_cost(cost_b):>12}{RESET}"
+        f"  {bar}  {BOLD}{cost_delta_color}{cost_delta_str:>12}{RESET}{cost_flag}"
+    )
 
-    a_cache = (a.usage.cache_read_tokens / a.usage.total_input * 100) if a.usage.total_input else 0
-    b_cache = (b.usage.cache_read_tokens / b.usage.total_input * 100) if b.usage.total_input else 0
-    flag = " ✓" if b_cache > a_cache else (" ✗" if b_cache < a_cache else "")
-    print(f"   {'Cache hit rate':<18}  {a_cache:>11.0f}%  {b_cache:>11.0f}%{flag}")
+    # Cache hit rate row — colored by threshold
+    def _cache_color(pct: float) -> str:
+        return GREEN if pct >= 80 else (YELLOW if pct >= 50 else RED)
+
+    a_cc = _cache_color(a_cache)
+    b_cc = _cache_color(b_cache)
+    cache_delta = b_cache - a_cache
+    if cache_delta > 0:
+        cache_delta_str = f"+{cache_delta:.0f}%"
+        cache_delta_color = GREEN
+        cache_flag = f"  {GREEN}✓{RESET}"
+    elif cache_delta < 0:
+        cache_delta_str = f"{cache_delta:.0f}%"
+        cache_delta_color = RED
+        cache_flag = f"  {RED}✗{RESET}"
+    else:
+        cache_delta_str = "—"
+        cache_delta_color = DIM
+        cache_flag = ""
+    bar = _delta_bar(a_cache, b_cache)
+    print(
+        f"   {'Cache hit rate':<18}  {BOLD}{a_cc}{a_cache:>11.0f}%{RESET}"
+        f"  {BOLD}{b_cc}{b_cache:>11.0f}%{RESET}"
+        f"  {bar}  {BOLD}{cache_delta_color}{cache_delta_str:>12}{RESET}{cache_flag}"
+    )
 
     if a.duration_seconds and b.duration_seconds:
-        row("Duration (sec)", int(a.duration_seconds), int(b.duration_seconds))
+        int_row("Duration (sec)", int(a.duration_seconds), int(b.duration_seconds))
 
+    # ── Context files ─────────────────────────────────────────────────────────
     set_a, set_b = set(a.unique_files), set(b.unique_files)
     only_a = sorted(set_a - set_b)
     only_b = sorted(set_b - set_a)
     both = sorted(set_a & set_b)
 
-    print(f"\n── Context files  (A: {len(set_a)}  B: {len(set_b)})")
+    print(section(f"Context files  (A: {len(set_a)}  B: {len(set_b)})"))
+
+    def _path_parts(fp: str):
+        sp = _short(fp)
+        parts = sp.rsplit("/", 1)
+        return (parts[0] + "/", parts[1]) if len(parts) == 2 else ("", sp)
+
     if both:
-        print(f"\n   In both ({len(both)})")
         for fp in both:
-            print(f"     {_short(fp)}")
+            d, fn = _path_parts(fp)
+            print(f"   {DIM}·  {d}{RESET}{_short(fp).rsplit('/', 1)[-1]}")
     if only_a:
-        print(f"\n   Only in A — not in B ({len(only_a)})")
+        if both:
+            print()
         for fp in only_a:
-            print(f"     − {_short(fp)}")
+            d, fn = _path_parts(fp)
+            print(f"   {RED}−{RESET}  {DIM}{d}{RESET}{BOLD}{fn}{RESET}")
     if only_b:
-        print(f"\n   Only in B — not in A ({len(only_b)})")
+        if both or only_a:
+            print()
         for fp in only_b:
-            print(f"     + {_short(fp)}")
+            d, fn = _path_parts(fp)
+            print(f"   {GREEN}+{RESET}  {DIM}{d}{RESET}{BOLD}{fn}{RESET}")
+
+    # ── Summary ───────────────────────────────────────────────────────────────
+    print()
+    print(rule(60))
+    print()
 
     delta_t = b.usage.total - a.usage.total
     delta_f = len(set_b) - len(set_a)
-    print(f"\n── Summary")
+
     if delta_t < 0:
-        print(f"   B used {abs(delta_t):,} fewer tokens ({abs(delta_t)/a.usage.total*100:.0f}% reduction) ✓")
+        pct = abs(delta_t) / a.usage.total * 100 if a.usage.total > 0 else 0
+        print(f"  {GREEN}✓ B used {abs(delta_t):,} fewer tokens ({pct:.0f}% reduction){RESET}")
     elif delta_t > 0:
-        print(f"   B used {delta_t:,} more tokens ({delta_t/a.usage.total*100:.0f}% increase)")
+        pct = delta_t / a.usage.total * 100 if a.usage.total > 0 else 0
+        print(f"  {RED}✗ B used {delta_t:,} more tokens ({pct:.0f}% increase){RESET}")
     else:
-        print(f"   Token usage identical")
+        print(f"  {DIM}Token usage identical{RESET}")
+
     if delta_f < 0:
-        print(f"   B loaded {abs(delta_f)} fewer context file(s) ✓")
+        print(f"  {GREEN}✓ B loaded {abs(delta_f)} fewer context file(s){RESET}")
     elif delta_f > 0:
-        print(f"   B loaded {delta_f} more context file(s)")
+        print(f"  {YELLOW}✗ B loaded {delta_f} more context file(s){RESET}")
     else:
-        print(f"   Same number of context files")
+        print(f"  {DIM}Same number of context files{RESET}")
+
     print()
 
 
