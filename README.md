@@ -150,6 +150,33 @@ AGENTS.md refactor actually reduced cost.
 
 ---
 
+### `agentrace files [PROJECT]`
+
+Ranks every context file by total token spend across all sessions. Shows load
+count, estimated tokens per load, a proportional bar, and which files no longer
+exist on disk (dead references from old refactors).
+
+```
+  ╭────────────────────────────────────────────────────────╮
+  │  📊  Context File Analysis                             │
+  │  10 sessions  ·  75 total loads  ·  49 unique files   │
+  ╰────────────────────────────────────────────────────────╯
+
+  Ranked by total token spend
+
+  ~/workspace/capacity/app/api/router.py
+  ████████████████████████  27k tokens  (7k/load × 4)
+
+  ~/workspace/capacity/frontend/src/App.tsx
+  █████████████░░░░░░░░░░░  18k tokens  (3k/load × 5)
+
+  … and 24 more smaller files
+
+  🗂  5 file(s) no longer on disk: ProjectsView.tsx, CapacityView.tsx …
+```
+
+---
+
 ### `agentrace watch [PROJECT_PATH]`
 
 Live session monitor. Waits for a new Claude Code session to start, then
@@ -176,6 +203,41 @@ agentrace watch  waiting for a new Claude Code session…
 ── Session ended  (2.1 min)
    Tokens:     89k  (cache 91%)
    Files read: 4
+```
+
+---
+
+### `agentrace tree [PROJECT]`
+
+Detects co-load clusters — groups of files that are consistently loaded together
+across sessions. Visualizes your context tree, estimates token savings from
+adopting it, and optionally generates a `CLAUDE.md.suggested` skeleton that
+encodes the tree as task-specific load instructions.
+
+```
+  ╭────────────────────────────────────────────────────────╮
+  │  🌳  Context Tree  ~/workspace/capacity                │
+  │  10 sessions  ·  49 unique files  ·  3 clusters        │
+  ╰────────────────────────────────────────────────────────╯
+
+  📌  Always load  ·  appears in 70%+ of sessions
+    AGENTS.md  ~4k tokens
+
+  Cluster 1  Backend API  ·  6/10 sessions
+    ██████████████████  router.py    ~7k
+    █████████████░░░░░  deps.py      ~2k
+    ████████░░░░░░░░░░  calculator.py ~3k
+
+  Cluster 2  Frontend  ·  4/10 sessions
+    ██████████████████  App.tsx       ~2k
+    ████████████░░░░░░  types/index.ts ~1k
+
+  Current avg files/session  7.5
+  Estimated with tree        3.2  (↓ 4.3 fewer)
+
+  ✨ Applying this tree could save ~8k tokens/session
+
+  → Write CLAUDE.md skeleton to CLAUDE.md.suggested? [y/N]
 ```
 
 ---

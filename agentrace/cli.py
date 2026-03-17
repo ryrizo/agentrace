@@ -374,6 +374,11 @@ COMMANDS
       cache efficiency change, and which context files were added or
       removed. The core command for proving context optimization worked.
 
+  files [PROJECT]
+      Context file cost analysis — ranked by total token spend.
+      Shows which files are most expensive, how often they're loaded,
+      estimated tokens per load, and files no longer on disk.
+
   watch [PROJECT]
       Live session monitor. Waits for a new Claude Code session to
       start, then tails it in real-time — file loads, edits, execs,
@@ -412,7 +417,11 @@ EXAMPLES
   agentrace show 1
   agentrace compare 1 3
   agentrace stats ~/workspace/capacity
+  agentrace files
   agentrace watch
+  agentrace tree
+  agentrace recommend
+  agentrace diff
 """)
 
 
