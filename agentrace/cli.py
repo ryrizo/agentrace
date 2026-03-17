@@ -21,6 +21,10 @@ from .parser import (
     resolve_session_ref, list_projects, detect_project, Session
 )
 from .cost import session_cost, fmt_cost
+from .display import (
+    Spinner, box, section, rule, color_bar, mini_bar, fmt_tokens, short,
+    RESET, BOLD, DIM, GREEN, YELLOW, RED, CYAN, GOLD, MUTED,
+)
 from .watcher import watch as _watch
 from . import cmd_files as _cmd_files
 from . import cmd_tree as _cmd_tree
@@ -168,82 +172,162 @@ def cmd_show(ref: str, project: str | None = None):
 
 
 def cmd_stats(project: str | None = None):
-    """Aggregate stats across sessions."""
-    sessions = _get_sessions(project)
+    """Aggregate stats across sessions with rich visual display."""
+
+    with Spinner("Crunching session data"):
+        sessions = _get_sessions(project)
+
     if not sessions:
-        print("No sessions found.")
+        print("\n  No sessions found.\n")
         return
 
+    # ── Compute aggregates ──────────────────────────────────────────────────
     total_tokens = sum(s.usage.total for s in sessions)
-    avg_tokens = total_tokens // len(sessions)
-    avg_files = sum(len(s.unique_files) for s in sessions) // len(sessions)
-    total_input = sum(s.usage.total_input for s in sessions)
-    total_cache = sum(s.usage.cache_read_tokens for s in sessions)
-    cache_pct = (total_cache / total_input * 100) if total_input > 0 else 0
+    avg_tokens   = total_tokens // len(sessions)
+    avg_files    = sum(len(s.unique_files) for s in sessions) // len(sessions)
+    total_input  = sum(s.usage.total_input for s in sessions)
+    total_cache  = sum(s.usage.cache_read_tokens for s in sessions)
+    cache_pct    = (total_cache / total_input * 100) if total_input > 0 else 0
+    total_cost   = sum(session_cost(s) for s in sessions)
+    avg_cost     = total_cost / len(sessions) if sessions else 0.0
 
     file_counts: dict[str, int] = {}
     for s in sessions:
         for fp in s.unique_files:
             file_counts[fp] = file_counts.get(fp, 0) + 1
-
     top_files = sorted(file_counts.items(), key=lambda x: x[1], reverse=True)[:10]
+
+    # Date range
+    dated = [s for s in sessions if s.started_at]
+    if dated:
+        dates = sorted(s.started_at[:10] for s in dated)
+        date_range = f"{dates[0]} → {dates[-1]}" if dates[0] != dates[-1] else dates[0]
+    else:
+        date_range = "—"
+
     scope = _short(project) if project else "all projects"
 
-    total_cost = sum(session_cost(s) for s in sessions)
-    avg_cost = total_cost / len(sessions) if sessions else 0.0
+    # ── Header ──────────────────────────────────────────────────────────────
+    print()
+    print(box(
+        f"📈  Stats  {scope}",
+        f"{len(sessions)} sessions  ·  {date_range}",
+    ))
 
-    print(f"\n── Stats — {scope}  ({len(sessions)} sessions)")
-    print(f"   Total tokens:      {total_tokens:>12,}")
-    print(f"   Avg per session:   {avg_tokens:>12,}")
-    print(f"   Avg files read:    {avg_files:>12}")
-    print(f"   Cache hit rate:    {cache_pct:>11.0f}%")
-    print(f"   Total cost:        {fmt_cost(total_cost):>12}")
-    print(f"   Avg cost/session:  {fmt_cost(avg_cost):>12}")
+    # ── Key numbers ─────────────────────────────────────────────────────────
+    print(section("Key numbers"))
 
-    print(f"\n── Most-loaded context files")
-    for fp, count in top_files:
-        bar = "█" * min(count, 40)
-        print(f"   {count:>4}x  {bar}  {_short(fp)}")
+    if cache_pct >= 80:
+        cache_color = GREEN
+    elif cache_pct >= 50:
+        cache_color = YELLOW
+    else:
+        cache_color = RED
 
-    # ── Sessions over time ──────────────────────────────────────────────────
-    # Sort oldest → newest so the trend reads left to right
-    chronological = sorted(
-        [s for s in sessions if s.started_at],
-        key=lambda s: s.started_at or ""
-    )
+    col_w = 14  # right-align numbers in this width
+
+    def num(val: str) -> str:
+        return f"{BOLD}{val}{RESET}"
+
+    def lbl(val: str) -> str:
+        return f"{DIM}{val}{RESET}"
+
+    def cost_num(val: str) -> str:
+        return f"{GOLD}{BOLD}{val}{RESET}"
+
+    rows = [
+        (num(fmt_tokens(total_tokens)), lbl("total tokens"),
+         cost_num(fmt_cost(total_cost)),  lbl("total cost")),
+        (num(fmt_tokens(avg_tokens)),   lbl("avg / session"),
+         cost_num(fmt_cost(avg_cost)),   lbl("avg / session")),
+        (num(str(avg_files)),           lbl("avg files"),
+         f"{cache_color}{BOLD}{cache_pct:.0f}%{RESET}", lbl("cache hit rate")),
+    ]
+    for (n1, l1, n2, l2) in rows:
+        print(f"    {n1:>30}  {l1:<28}  {n2:>30}  {l2}")
+
+    # ── Most-loaded files ────────────────────────────────────────────────────
+    if top_files:
+        print()
+        print(rule())
+        print(section("Most-loaded context files"))
+
+        max_count = top_files[0][1] if top_files else 1
+        for fp, count in top_files:
+            bar = color_bar(count / max_count, width=24)
+            short_path = short(fp)
+            parts = short_path.rsplit("/", 1)
+            if len(parts) == 2:
+                path_display = f"{DIM}{parts[0]}/{RESET}{BOLD}{parts[1]}{RESET}"
+            else:
+                path_display = f"{BOLD}{short_path}{RESET}"
+            print(f"  {BOLD}{count}×{RESET}  {bar}  {path_display}")
+
+    # ── Sessions over time ───────────────────────────────────────────────────
+    chronological = sorted(dated, key=lambda s: s.started_at or "")
     if chronological:
-        max_tokens = max(s.usage.total for s in chronological) or 1
-        BAR_WIDTH = 28
+        print()
+        print(rule())
+        print(section("Sessions over time"))
 
-        print(f"\n── Sessions over time")
+        max_tok = max(s.usage.total for s in chronological) or 1
+
         for s in chronological:
             idx = sessions.index(s) + 1
-            bar_len = max(1, round(s.usage.total / max_tokens * BAR_WIDTH))
-            bar = "█" * bar_len
-            cache_p = 0
+            bar = mini_bar(s.usage.total / max_tok, width=24)
+            cache_p = 0.0
             if s.usage.total_input > 0:
                 cache_p = s.usage.cache_read_tokens / s.usage.total_input * 100
             dur = f"{s.duration_seconds/60:.0f}m" if s.duration_seconds else "?"
-            slug_hint = f"  {s.slug}" if s.slug else ""
+            cost_s = session_cost(s)
             print(
-                f"   #{idx:<3} {s.date}  {bar:<{BAR_WIDTH}}  "
-                f"{_fmt_tokens(s.usage.total):>6}  "
-                f"cache {cache_p:>2.0f}%  "
-                f"{len(s.unique_files)} files  {dur}"
-                f"{slug_hint}"
+                f"  {DIM}#{idx:<3}{RESET}  {DIM}{s.date}{RESET}  {bar}  "
+                f"{BOLD}{fmt_tokens(s.usage.total):>6}{RESET}  "
+                f"{GOLD}{fmt_cost(cost_s):>7}{RESET}  "
+                f"{DIM}cache{RESET} {cache_p:>2.0f}%  "
+                f"{DIM}{dur}{RESET}"
             )
 
-        # Trend: compare avg of first half vs second half
+        # Trend
+        print()
+        print(rule())
         if len(chronological) >= 4:
             mid = len(chronological) // 2
-            first_avg = sum(s.usage.total for s in chronological[:mid]) / mid
+            first_avg  = sum(s.usage.total for s in chronological[:mid]) / mid
             second_avg = sum(s.usage.total for s in chronological[mid:]) / (len(chronological) - mid)
-            delta_pct = (second_avg - first_avg) / first_avg * 100
+            delta_pct  = (second_avg - first_avg) / first_avg * 100
             if abs(delta_pct) >= 5:
-                arrow = "↑" if delta_pct > 0 else "↓"
+                arrow     = "↑" if delta_pct > 0 else "↓"
                 direction = "increasing" if delta_pct > 0 else "decreasing"
-                verdict = "context growing" if delta_pct > 0 else "context shrinking ✓"
-                print(f"\n   {arrow} Tokens per session {direction} {abs(delta_pct):.0f}% — {verdict}")
+                verdict   = "context growing" if delta_pct > 0 else "context shrinking ✓"
+                trend_color = YELLOW if delta_pct > 0 else GREEN
+                print(
+                    f"\n  {trend_color}{BOLD}{arrow} Tokens {direction} {abs(delta_pct):.0f}%"
+                    f"{RESET}  {DIM}·  {verdict}{RESET}"
+                )
+            else:
+                print(f"\n  {DIM}→ Token usage is stable across sessions{RESET}")
+        else:
+            print(f"\n  {DIM}Not enough sessions to calculate trend{RESET}")
+
+    # ── Insights ─────────────────────────────────────────────────────────────
+    insights = []
+    if cache_pct < 50:
+        insights.append(
+            f"💡 {DIM}Low cache rate — consider pinning frequently-loaded files to CLAUDE.md{RESET}"
+        )
+    if top_files:
+        top_fp, top_count = top_files[0]
+        total_file_loads = sum(c for _, c in file_counts.items())
+        if total_file_loads > 0 and top_count / total_file_loads > 0.20:
+            fname = short(top_fp).rsplit("/", 1)[-1]
+            insights.append(
+                f"💡 {BOLD}{fname}{RESET}{DIM} dominates context — prime candidate for splitting{RESET}"
+            )
+    if insights:
+        print()
+        for tip in insights:
+            print(f"  {tip}")
 
     print()
 
