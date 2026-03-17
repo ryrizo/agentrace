@@ -315,11 +315,23 @@ to measure impact.
 ## Install
 
 ```bash
-git clone <repo>
+git clone https://github.com/ryrizo/agentrace.git
 cd agentrace
-uv venv && uv pip install -e .
+uv tool install --editable .
 agentrace sessions
 ```
+
+Requires [uv](https://docs.astral.sh/uv/). No other dependencies.
+
+### iTerm2 Status Bar (optional)
+
+Shows live token count and cost in your iTerm2 status bar while Claude Code runs.
+
+```bash
+bash plugins/install_iterm2.sh
+```
+
+See [`plugins/README.md`](plugins/README.md) for setup instructions.
 
 ---
 
@@ -328,4 +340,6 @@ agentrace sessions
 Working local CLI. All commands read directly from `~/.claude/projects/` —
 no configuration or external services required.
 
-See `docs/VISION.md` for roadmap and data model.
+Zero external dependencies. No API keys. No data leaves your machine.
+
+See `docs/VISION.md` for roadmap.
