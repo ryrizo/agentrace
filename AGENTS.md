@@ -4,14 +4,26 @@ Entry point for AI coding agents working in this repo. Read this first.
 
 ## What This Project Is
 
-Agentrace is an observability tool for AI agent sessions.
-It logs context files loaded, token counts, skills fired, and session outcomes
-so teams can prove whether their AI workflow investments (skills, knowledge trees,
-hooks) are actually working.
+Agentrace is a CLI tool for observability of Claude Code sessions.
+It parses `~/.claude/projects/` NDJSON files to show token usage,
+context files loaded, cache efficiency, and session diffs — with no
+configuration, no hooks, and no external services.
 
-## Project Status
+## Repository Layout
 
-Early stage. Start by reading `docs/VISION.md` for the full product thinking.
+```
+agentrace/
+├── README.md                  ← product overview + usage docs (auto-maintained)
+├── AGENTS.md                  ← this file
+├── pyproject.toml             ← package config + CLI entrypoint
+├── .gitignore
+├── agentrace/
+│   ├── __init__.py
+│   ├── parser.py              ← reads + parses ~/.claude/projects/ NDJSON files
+│   └── cli.py                 ← all CLI commands (sessions, show, stats, compare)
+└── docs/
+    └── VISION.md              ← product thinking, data model, roadmap
+```
 
 ## After Completing a Task
 
@@ -19,23 +31,44 @@ Before committing, check whether your change requires:
 
 | Change type | Update |
 |---|---|
-| New file added | Repository layout below |
-| New data model or schema | `docs/VISION.md` data model section |
-| New CLI command or API | `docs/VISION.md` interfaces section |
-| New pattern discovered | Critical Rules below |
+| New CLI command added | Update `README.md` Usage section (see hook below) |
+| New file added | Update repository layout above |
+| New data model or field | Update `docs/VISION.md` data model section |
+| New pattern or footgun | Add to Critical Rules below |
 
-## Repository Layout
+## ⚡ README Auto-Update Hook
+
+**This is the post-task hook. Every agent must follow it.**
+
+After adding or modifying any `agentrace` CLI command, update the
+`README.md` Usage section between these markers:
 
 ```
-agentrace/
-├── README.md          ← product overview and use cases
-├── AGENTS.md          ← this file
-├── CLAUDE.md          ← AI workflow strategy (when it exists)
-├── .gitignore
-└── docs/
-    └── VISION.md      ← product thinking, data model, roadmap
+<!-- USAGE:START — auto-updated by agents. Do not edit this block manually. -->
+...
+<!-- USAGE:END -->
 ```
+
+For each command, include:
+1. The command signature with args
+2. One sentence describing what it does
+3. A representative output sample (copy from actual output if possible)
+
+This is how the docs stay current automatically — the agent that adds the
+feature also writes the docs for it in the same commit.
 
 ## Critical Rules
 
-*(none yet — add patterns here as they emerge)*
+- Parser lives in `parser.py`, all display/CLI logic in `cli.py`
+- Use `_short_path()` for any file path displayed to the user
+- `find_sessions()` with no args returns ALL projects; pass a path to scope
+- Session IDs only need to be a prefix match (8 chars is enough for `show`/`compare`)
+- No external dependencies — keep `dependencies = []` in pyproject.toml
+- Use `uv` not `pip`
+
+## Install (dev)
+
+```bash
+uv venv && uv pip install -e .
+agentrace sessions
+```

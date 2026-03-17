@@ -1,16 +1,13 @@
 # Agentrace
 
-**Observability for AI agent sessions.**
+**Observability for Claude Code sessions.**
 
-When your team starts using AI agents seriously — skills, hooks, knowledge trees,
-context files — you eventually ask: *is any of this actually working?*
+When your team starts using AI agents seriously — skills, knowledge trees, context
+files — you eventually ask: *is any of this actually working?*
 
-Agentrace answers that. It logs what context was loaded, how many tokens it cost,
-which skills fired, and what the session produced. Over time you can prove that
-your knowledge tree reduced context load by 60%, or that a new skill cut average
-session token usage in half.
-
-It's an audit log for the AI layer of your workflow.
+Agentrace answers that. It reads Claude Code's local session logs directly (no
+setup, no hooks needed) and shows you what context was loaded, how many tokens
+it cost, and whether your optimizations are actually reducing cost.
 
 ---
 
@@ -22,46 +19,128 @@ When you move a team to AI-assisted workflows, you make bets:
 - "This knowledge tree will reduce how much context we load."
 - "These hooks will keep docs up to date automatically."
 
-Right now those are gut feelings. You can't show the numbers. When someone asks
-*"is this AI stuff actually making us better?"*, you're guessing.
-
-Agentrace makes those bets measurable.
+Right now those are gut feelings. Agentrace makes them measurable.
 
 ---
 
-## What It Tracks
+## How It Works
 
-| Signal | Why it matters |
-|--------|---------------|
-| **Context files loaded** | Proves a leaner knowledge tree loads less |
-| **Token counts (in/out)** | Hard numbers on context cost per session |
-| **Skills fired** | Which skills are being used, which aren't |
-| **Session outcomes** | What was produced, what was committed |
-| **Before/after comparisons** | Show improvement when you optimize context |
+Claude Code stores full session logs at `~/.claude/projects/`. Agentrace
+parses them — token counts, cache efficiency, every file read — with no
+configuration and no external services.
+
+```
+~/.claude/projects/{project}/
+    {session-id}.jsonl   ← agentrace reads these
+```
 
 ---
 
-## Use Cases
+## Usage
 
-**Proving context reduction to skeptics**
-Before: agent loads 12 files, 42k tokens. After knowledge tree refactor: 4 files,
-8k tokens. Same quality outcome. That's a measurable argument.
+<!-- USAGE:START — auto-updated by agents. Do not edit this block manually. -->
 
-**Skills library adoption tracking**
-Which skills does your team actually use? Which are dead weight?
-Agentrace shows you what fires and what doesn't.
+### `agentrace sessions [PROJECT_PATH]`
 
-**Debugging agent behavior**
-"Why did the agent make that decision?" → look at what context it had access to.
+List recent Claude Code sessions with token counts, file counts, and duration.
 
-**Benchmarking knowledge tree improvements**
-Make a change to your context structure. Run the same task before and after.
-Compare the traces. Iterate.
+```
+SESSION                                SLUG                         MODEL                  FILES     TOKENS   MIN
+---------------------------------------------------------------------------------------------------------------
+e927ea8e-c4a3-45d1-a939-0af5887e8945  (no slug)                    opus-4-6                   9    730,604     1
+25c7503a-b036-481c-81fd-39e4a863eaf8  (no slug)                    opus-4-6                  10  3,327,657     4
+```
+
+---
+
+### `agentrace show SESSION_ID`
+
+Full detail for a single session: token breakdown (fresh vs cached),
+cache hit rate, duration, and every context file loaded.
+
+```
+── Session: e927ea8e-c4a3-45d1-a939-0af5887e8945
+   Model:    claude-opus-4-6
+   Duration: 1.3 min
+
+── Tokens
+   Input (fresh):            25
+   Cache created:       168,130
+   Cache hits:          558,985  (77% of input)
+   Output:                3,464
+   Total:               730,604
+
+── Context files (9 unique)
+   ~/workspace/capacity/AGENTS.md
+   ~/workspace/capacity/frontend/src/App.tsx
+   ...
+```
+
+---
+
+### `agentrace stats [PROJECT_PATH]`
+
+Aggregate stats across all sessions: total tokens, averages, cache hit rate,
+and a bar chart of most-loaded context files.
+
+```
+── Stats across 9 sessions
+   Total tokens:      15,959,967
+   Avg per session:    1,773,329
+   Avg files read:             8
+   Cache hit rate:            84%
+
+── Most-loaded context files
+      5x  █████  ~/workspace/capacity/frontend/src/App.tsx
+      4x  ████   ~/workspace/capacity/app/api/router.py
+      3x  ███    ~/workspace/capacity/AGENTS.md
+```
+
+---
+
+### `agentrace compare SESSION_A SESSION_B`
+
+Diff two sessions side by side. Shows token delta, cache efficiency change,
+and which context files were added or removed between sessions. This is the
+core command for proving that a knowledge tree or AGENTS.md refactor
+actually reduced cost.
+
+```
+── Compare
+   A: e927ea8e  (2026-03-09)   — before AGENTS.md refactor
+   B: 25c7503a  (2026-03-09)   — after
+
+── Tokens                         A             B       DELTA
+   Total                    730,604     3,327,657  +2,597,053 ✗
+   Cache hit rate               77%           92%            ✓
+
+── Context files  (A: 9  B: 10)
+   In both (2): AGENTS.md, ProjectList.tsx
+   Only in A — removed in B (7): App.tsx, HeatmapCell.tsx ...
+   Only in B — added vs A (8): router.py, DATA_MODELS.md ...
+
+── Summary
+   B used 2,597,053 more tokens (355% increase)
+```
+
+<!-- USAGE:END -->
+
+---
+
+## Install
+
+```bash
+git clone <repo>
+cd agentrace
+uv venv && uv pip install -e .
+agentrace sessions
+```
 
 ---
 
 ## Status
 
-Early scaffold. The vision is clear; the implementation is next.
+Working local CLI. All commands read directly from `~/.claude/projects/` —
+no configuration or external services required.
 
-See `docs/VISION.md` for product thinking and roadmap.
+See `docs/VISION.md` for roadmap and data model.
