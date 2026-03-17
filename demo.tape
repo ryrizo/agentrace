@@ -11,7 +11,14 @@ Env PATH "/Users/ryanperrizo/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bi
 
 Sleep 1s
 
+# ── agentrace water — lead with the hook ─────────────────────
+Type "agentrace water"
+Enter
+Sleep 5s
+
 # ── agentrace sessions ───────────────────────────────────────
+Ctrl+L
+Sleep 200ms
 Type "agentrace sessions"
 Enter
 Sleep 3.5s
@@ -29,13 +36,6 @@ Sleep 200ms
 Type "agentrace compare 1 6"
 Enter
 Sleep 4s
-
-# ── agentrace water ──────────────────────────────────────────
-Ctrl+L
-Sleep 200ms
-Type "agentrace water"
-Enter
-Sleep 4.5s
 
 # ── agentrace recommend ──────────────────────────────────────
 Ctrl+L
