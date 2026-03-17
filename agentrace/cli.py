@@ -11,6 +11,7 @@ Usage:
 import sys
 from pathlib import Path
 from .parser import find_sessions, parse_session_file, Session
+from .watcher import watch as _watch
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -248,11 +249,13 @@ def cmd_compare(id_a: str, id_b: str):
 def main():
     args = sys.argv[1:]
     if not args:
-        print("Usage: agentrace <sessions|show|stats|compare> [args]")
-        print("       agentrace sessions [PROJECT_PATH]")
-        print("       agentrace show SESSION_ID")
-        print("       agentrace stats [PROJECT_PATH]")
-        print("       agentrace compare SESSION_A SESSION_B")
+        print("Usage: agentrace <command> [args]")
+        print()
+        print("  sessions [PROJECT_PATH]       List recent sessions")
+        print("  show SESSION_ID               Full detail for one session")
+        print("  stats [PROJECT_PATH]          Aggregate stats + top files")
+        print("  compare SESSION_A SESSION_B   Diff two sessions")
+        print("  watch [PROJECT_PATH]          Live session monitor")
         return
 
     cmd = args[0]
@@ -272,9 +275,11 @@ def main():
             print("Usage: agentrace compare <session-a> <session-b>")
             return
         cmd_compare(rest[0], rest[1])
+    elif cmd == "watch":
+        _watch(rest[0] if rest else None)
     else:
         print(f"Unknown command: {cmd}")
-        print("Commands: sessions, show, stats, compare")
+        print("Commands: sessions, show, stats, compare, watch")
 
 
 if __name__ == "__main__":

@@ -123,6 +123,36 @@ actually reduced cost.
    B used 2,597,053 more tokens (355% increase)
 ```
 
+---
+
+### `agentrace watch [PROJECT_PATH]`
+
+Live session monitor. Waits for a new Claude Code session to start, then
+tails it in real-time — showing every file loaded, every exec/write/edit,
+and a running token count as the session progresses.
+
+Run it in a split terminal while you work in Claude Code.
+
+```
+agentrace watch  waiting for a new Claude Code session…
+  press Ctrl+C to stop
+
+● Session started  mighty-munching-goose
+  id:   e927ea8e
+  cwd:  ~/workspace/capacity
+
+  09:14:22  📄 loaded   ~/workspace/capacity/AGENTS.md
+  09:14:23  📄 loaded   ~/workspace/capacity/app/api/router.py
+  09:14:25  ◈ tokens    total 42k  cache 84%  out 1.2k
+  09:14:28  ✏  edit     ~/workspace/capacity/app/api/router.py
+  09:14:30  ⚡ exec      cd frontend && npm run build
+  09:14:45  ◈ tokens    total 89k  cache 91%  out 3.1k
+
+── Session ended  (2.1 min)
+   Tokens:     89k  (cache 91%)
+   Files read: 4
+```
+
 <!-- USAGE:END -->
 
 ---
