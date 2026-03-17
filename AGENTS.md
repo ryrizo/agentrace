@@ -20,7 +20,13 @@ agentrace/
 ├── agentrace/
 │   ├── __init__.py
 │   ├── parser.py              ← reads + parses ~/.claude/projects/ NDJSON files
-│   └── cli.py                 ← all CLI commands (sessions, show, stats, compare)
+│   ├── cost.py                ← session_cost(), estimate_file_tokens(), fmt_cost()
+│   ├── display.py             ← ANSI colors, bars, spinners, box/section/rule helpers
+│   ├── cli.py                 ← all CLI commands wired together
+│   ├── cmd_files.py           ← `agentrace files` — context file cost analysis
+│   ├── cmd_recommend.py       ← `agentrace recommend` — context optimization recommendations
+│   ├── cmd_diff.py            ← `agentrace diff` — git correlation for context changes
+│   └── watcher.py             ← `agentrace watch` — live session monitor
 └── docs/
     └── VISION.md              ← product thinking, data model, roadmap
 ```

@@ -20,8 +20,11 @@ from .parser import (
     find_sessions, load_sessions_sorted, parse_session_file,
     resolve_session_ref, list_projects, detect_project, Session
 )
+from .cost import session_cost, fmt_cost
 from .watcher import watch as _watch
 from . import cmd_files as _cmd_files
+from . import cmd_recommend as _cmd_recommend
+from . import cmd_diff as _cmd_diff
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -108,16 +111,17 @@ def cmd_sessions(project: str | None = None):
 
     scope = _short(project) if project else "all projects"
     print(f"\nSessions — {scope}\n")
-    print(f"{'#':<5} {'DATE':<12} {'SLUG':<30} {'MODEL':<18} {'FILES':>5} {'TOKENS':>10} {'MIN':>5}")
-    print("-" * 90)
+    print(f"{'#':<5} {'DATE':<12} {'SLUG':<30} {'MODEL':<18} {'FILES':>5} {'TOKENS':>10} {'COST':>8} {'MIN':>5}")
+    print("-" * 100)
 
     for i, s in enumerate(sessions, 1):
         duration = f"{s.duration_seconds / 60:.0f}" if s.duration_seconds else "?"
         model_short = (s.model or "?").replace("claude-", "").replace("anthropic/", "")
         slug = s.slug[:28] if s.slug else f"({s.session_id[:8]})"
+        cost = fmt_cost(session_cost(s))
         print(
             f"#{i:<4} {s.date:<12} {slug:<30} {model_short[:16]:<18} "
-            f"{len(s.unique_files):>5} {_fmt_tokens(s.usage.total):>10} {duration:>5}"
+            f"{len(s.unique_files):>5} {_fmt_tokens(s.usage.total):>10} {cost:>8} {duration:>5}"
         )
     print(f"\nTip: use the # to reference a session  →  agentrace show 1  |  agentrace compare 1 3\n")
 
@@ -150,6 +154,12 @@ def cmd_show(ref: str, project: str | None = None):
     print(f"   Output:          {s.usage.output_tokens:>10,}")
     print(f"   Total:           {s.usage.total:>10,}")
 
+    cost = session_cost(s)
+    model_short = (s.model or "?").replace("claude-", "").replace("anthropic/", "")
+    print(f"\n── Cost")
+    print(f"   Estimated:    {fmt_cost(cost)}")
+    print(f"   ({model_short} pricing)")
+
     print(f"\n── Context files ({len(s.unique_files)} unique)")
     for fp in s.unique_files:
         print(f"   {_short(fp)}")
@@ -178,11 +188,16 @@ def cmd_stats(project: str | None = None):
     top_files = sorted(file_counts.items(), key=lambda x: x[1], reverse=True)[:10]
     scope = _short(project) if project else "all projects"
 
+    total_cost = sum(session_cost(s) for s in sessions)
+    avg_cost = total_cost / len(sessions) if sessions else 0.0
+
     print(f"\n── Stats — {scope}  ({len(sessions)} sessions)")
     print(f"   Total tokens:      {total_tokens:>12,}")
     print(f"   Avg per session:   {avg_tokens:>12,}")
     print(f"   Avg files read:    {avg_files:>12}")
     print(f"   Cache hit rate:    {cache_pct:>11.0f}%")
+    print(f"   Total cost:        {fmt_cost(total_cost):>12}")
+    print(f"   Avg cost/session:  {fmt_cost(avg_cost):>12}")
 
     print(f"\n── Most-loaded context files")
     for fp, count in top_files:
@@ -268,6 +283,20 @@ def cmd_compare(ref_a: str, ref_b: str, project: str | None = None):
     row("Cache hits", a.usage.cache_read_tokens, b.usage.cache_read_tokens, lower_is_better=False)
     row("Output", a.usage.output_tokens, b.usage.output_tokens)
 
+    cost_a = session_cost(a)
+    cost_b = session_cost(b)
+    cost_delta = cost_b - cost_a
+    if cost_delta < 0:
+        cost_delta_str = f"-{fmt_cost(abs(cost_delta))}"
+        cost_flag = " ✓"
+    elif cost_delta > 0:
+        cost_delta_str = f"+{fmt_cost(cost_delta)}"
+        cost_flag = " ✗"
+    else:
+        cost_delta_str = "—"
+        cost_flag = ""
+    print(f"   {'Est. cost':<18}  {fmt_cost(cost_a):>12}  {fmt_cost(cost_b):>12}  {cost_delta_str:>12}{cost_flag}")
+
     a_cache = (a.usage.cache_read_tokens / a.usage.total_input * 100) if a.usage.total_input else 0
     b_cache = (b.usage.cache_read_tokens / b.usage.total_input * 100) if b.usage.total_input else 0
     flag = " ✓" if b_cache > a_cache else (" ✗" if b_cache < a_cache else "")
@@ -349,6 +378,16 @@ COMMANDS
       start, then tails it in real-time — file loads, edits, execs,
       and running token count. Run in a split terminal alongside Claude.
 
+  recommend [PROJECT]
+      Analyze context file usage and produce actionable recommendations:
+      what to pin in CLAUDE.md, what to load on-demand, what to split,
+      and what dead references to clean up.
+
+  diff [PROJECT]
+      Correlate git commits to AGENTS.md/CLAUDE.md with session token
+      trends. Shows whether each context change actually helped reduce
+      token usage.
+
   help
       Show this message.
 
@@ -416,9 +455,17 @@ def main():
         project, _ = _resolve_project(rest)
         _watch(project)
 
+    elif cmd == "recommend":
+        project, _ = _resolve_project(rest)
+        _cmd_recommend.run(project)
+
+    elif cmd == "diff":
+        project, _ = _resolve_project(rest)
+        _cmd_diff.run(project)
+
     else:
         print(f"Unknown command: {cmd}")
-        print("Commands: projects, sessions, show, stats, compare, watch")
+        print("Commands: projects, sessions, show, stats, compare, files, watch, recommend, diff")
 
 
 if __name__ == "__main__":
