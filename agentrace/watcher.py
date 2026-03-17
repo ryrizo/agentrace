@@ -140,15 +140,26 @@ class LiveSession:
 
 # ── File tailer ───────────────────────────────────────────────────────────────
 
-def _tail_session(path: Path, live: LiveSession):
-    """Tail a growing JSONL file, calling live.handle_event() for each new line."""
+def _tail_session(path: Path, live: LiveSession, from_start: bool = False):
+    """
+    Tail a growing JSONL file, calling live.handle_event() for each new line.
+
+    from_start=True  → replay all existing lines first, then follow new ones
+    from_start=False → seek to end, only show events from this point forward
+    """
     with open(path) as f:
-        f.seek(0, 2)  # start at end — we only want new lines
-        print(f"  {DIM}Tailing {path.name}…{RESET}\n")
+        if not from_start:
+            f.seek(0, 2)  # jump to end for brand-new sessions
+            print(f"  {DIM}Tailing {path.name}…{RESET}\n")
+        else:
+            print(f"  {DIM}Replaying session history…{RESET}\n")
         try:
             while True:
                 line = f.readline()
                 if not line:
+                    if from_start:
+                        # Switched to live-follow mode
+                        from_start = False
                     time.sleep(0.2)
                     continue
                 line = line.strip()
@@ -187,16 +198,70 @@ def _latest_session_file(project_path: str | None) -> Path | None:
     return max(files, key=lambda f: f.stat().st_mtime)
 
 
+def _find_active_session(project_path: str | None, max_age_seconds: int = 300) -> Path | None:
+    """
+    Return a session file that was modified within the last max_age_seconds.
+    Used to auto-attach to an already-running session.
+    """
+    now = time.time()
+    candidates = []
+
+    if not _get_projects_dir().exists():
+        return None
+
+    for f in _get_projects_dir().rglob("*.jsonl"):
+        if project_path:
+            escaped = project_path.replace("/", "-").lstrip("-")
+            if escaped not in str(f):
+                continue
+        try:
+            age = now - f.stat().st_mtime
+            if age <= max_age_seconds:
+                candidates.append((age, f))
+        except OSError:
+            pass
+
+    if not candidates:
+        return None
+    # Return the most recently modified
+    candidates.sort(key=lambda x: x[0])
+    return candidates[0][1]
+
+
 def watch(project_path: str | None = None):
     """Watch for a new Claude Code session and tail it live."""
-    print(f"\n{BOLD}agentrace watch{RESET}  {DIM}waiting for a new Claude Code session…{RESET}")
+    print(f"\n{BOLD}agentrace watch{RESET}")
     if project_path:
         print(f"  {DIM}scope: {_short(project_path)}{RESET}")
     print(f"  {DIM}press Ctrl+C to stop{RESET}\n")
 
     known_files: set[str] = set()
 
-    # Seed known files so we don't replay old sessions
+    # Check for an already-active session before seeding known_files
+    active = _find_active_session(project_path, max_age_seconds=300)
+    if active:
+        print(f"  {YELLOW}◈ Active session detected — attaching…{RESET}\n")
+        try:
+            with open(active) as fh:
+                first_line = fh.readline().strip()
+            first = json.loads(first_line) if first_line else {}
+        except Exception:
+            first = {}
+
+        live = LiveSession(
+            session_id=first.get("sessionId", active.stem),
+            slug=first.get("slug", ""),
+            cwd=first.get("cwd", ""),
+        )
+        live.print_header()
+        _tail_session(active, live, from_start=True)
+        live.print_summary()
+        known_files.add(str(active))
+        print(f"{DIM}Waiting for next session…{RESET}\n")
+    else:
+        print(f"  {DIM}waiting for a new Claude Code session…{RESET}\n")
+
+    # Seed remaining known files so we don't replay old sessions
     for f in (_get_projects_dir().rglob("*.jsonl") if _get_projects_dir().exists() else []):
         known_files.add(str(f))
 
