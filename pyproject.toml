@@ -1,0 +1,13 @@
+[project]
+name = "agentrace"
+version = "0.1.0"
+description = "Observability for Claude Code sessions"
+requires-python = ">=3.11"
+dependencies = []
+
+[project.scripts]
+agentrace = "agentrace.cli:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"

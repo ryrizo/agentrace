@@ -122,10 +122,49 @@ agentrace compare [before] [after]  # diff two sessions or groups
 agentrace stats                 # aggregate: avg tokens, top skills, etc.
 ```
 
-### Ingest (future)
-- OpenClaw webhook (fired at session end)
-- Claude Code hook (if/when Claude Code exposes session events)
-- Manual JSON log (portable, works with anything)
+### Ingest — Claude Code session files (no hook needed)
+
+Claude Code stores full NDJSON session logs at:
+```
+~/.claude/projects/{escaped-cwd}/{session-id}.jsonl
+```
+
+Each line is a session event. Key fields:
+
+```json
+{
+  "sessionId": "e927ea8e-...",
+  "timestamp": "2026-03-09T03:18:19.307Z",
+  "type": "assistant",
+  "cwd": "/Users/ryan/workspace/capacity",
+  "gitBranch": "main",
+  "slug": "mighty-munching-goose",
+  "message": {
+    "model": "claude-opus-4-6",
+    "usage": {
+      "input_tokens": 1,
+      "cache_creation_input_tokens": 28774,
+      "cache_read_input_tokens": 20411,
+      "output_tokens": 2240
+    },
+    "content": [{ "type": "tool_use", "name": "Read", "input": { "file_path": "..." } }]
+  },
+  "toolUseResult": {
+    "file": { "filePath": "/Users/ryan/workspace/capacity/AGENTS.md" }
+  }
+}
+```
+
+**What we can extract automatically:**
+- All files read (`Read` tool calls → `toolUseResult.file.filePath`)
+- Token counts per message (sum across session for totals)
+- Cache hit vs. miss breakdown (`cache_read_input_tokens` vs `cache_creation_input_tokens`)
+- Session duration (first timestamp → last timestamp)
+- Working directory + git branch
+- Model used
+- Session slug (human-readable name)
+
+**No self-reporting. No hooks. Just parse the files.**
 
 ### Storage (options)
 - **SQLite** — simplest, local, no infra. Good for personal use.
