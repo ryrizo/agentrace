@@ -272,24 +272,75 @@ def cmd_compare(ref_a: str, ref_b: str, project: str | None = None):
 
 # ── Entry point ───────────────────────────────────────────────────────────────
 
+def cmd_help():
+    """Print detailed help for all commands."""
+    print("""
+agentrace — observability for Claude Code sessions
+Reads ~/.claude/projects/ directly. No config needed.
+
+COMMANDS
+
+  projects
+      List all Claude Code projects with session counts,
+      total tokens, and last active date.
+
+  sessions [PROJECT]
+      List sessions numbered most-recent-first.
+      Omit PROJECT to auto-detect from current directory.
+
+  show SESSION [PROJECT]
+      Full detail for one session: token breakdown (fresh vs cached),
+      cache hit rate, duration, and every context file loaded.
+
+  stats [PROJECT]
+      Aggregate stats across all sessions: total tokens, averages,
+      cache hit rate, and a bar chart of most-loaded context files.
+
+  compare SESSION_A SESSION_B [PROJECT]
+      Diff two sessions side by side. Shows token delta per category,
+      cache efficiency change, and which context files were added or
+      removed. The core command for proving context optimization worked.
+
+  watch [PROJECT]
+      Live session monitor. Waits for a new Claude Code session to
+      start, then tails it in real-time — file loads, edits, execs,
+      and running token count. Run in a split terminal alongside Claude.
+
+  help
+      Show this message.
+
+REFERENCING SESSIONS
+  #number     most recent = #1  (agentrace show 1)
+  UUID prefix  first 4+ chars   (agentrace show e927)
+  slug prefix  first word       (agentrace compare mighty brave)
+
+REFERENCING PROJECTS
+  Pass a path:  agentrace sessions ~/workspace/myproject
+  Auto-detect:  run agentrace from inside the project directory
+
+EXAMPLES
+  agentrace projects
+  agentrace sessions
+  agentrace show 1
+  agentrace compare 1 3
+  agentrace stats ~/workspace/capacity
+  agentrace watch
+""")
+
+
 def main():
     args = sys.argv[1:]
     if not args:
-        print("Usage: agentrace <command> [args]\n")
-        print("  projects                      List all Claude Code projects")
-        print("  sessions [PROJECT]            List sessions  (#1 = most recent)")
-        print("  show SESSION [PROJECT]        Detail for one session")
-        print("  stats [PROJECT]               Aggregate stats + top files")
-        print("  compare A B [PROJECT]         Diff two sessions")
-        print("  watch [PROJECT]               Live session monitor")
-        print("\nSESSION: number (#1), UUID prefix, or slug prefix")
-        print("PROJECT: path, or omit to auto-detect from cwd\n")
+        cmd_help()
         return
 
     cmd = args[0]
     rest = args[1:]
 
-    if cmd == "projects":
+    if cmd in ("help", "--help", "-h"):
+        cmd_help()
+
+    elif cmd == "projects":
         cmd_projects()
 
     elif cmd == "sessions":
