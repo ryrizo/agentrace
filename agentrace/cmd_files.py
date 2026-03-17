@@ -63,15 +63,10 @@ def run(project: str | None = None):
     total_spend = sum(f.total_token_spend for f in files)
     total_session_cost = sum(session_cost(s) for s in sessions)
 
-    # Dominant model
-    models = [s.model for s in sessions if s.model]
-    dominant_model = max(set(models), key=models.count) if models else None
-    model_short = (dominant_model or "unknown").replace("claude-", "").replace("anthropic/", "")
-
     print()
     print(box(
         f"📊  Context File Analysis",
-        f"{len(sessions)} sessions  ·  {total_loads} total loads  ·  {len(files)} unique files  ·  {model_short}"
+        f"{len(sessions)} sessions  ·  {total_loads} total loads  ·  {len(files)} unique files",
     ))
 
     if not files:

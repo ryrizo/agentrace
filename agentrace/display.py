@@ -100,18 +100,27 @@ class Spinner:
 
 # ── Box / section headers ─────────────────────────────────────────────────────
 
-def box(title: str, subtitle: str = "", width: int = 58) -> str:
-    """Render a rounded box header."""
-    inner = width - 2
+def _strip_ansi(s: str) -> str:
+    """Strip ANSI escape codes for measuring visual width."""
+    import re
+    return re.sub(r"\033\[[0-9;]*m", "", s)
+
+def box(title: str, subtitle: str = "", width: int = 0) -> str:
+    """
+    Render a rounded box header. Width auto-sizes to content if width=0.
+    Min width 44, max width 72.
+    """
+    # Measure visual widths (ANSI-stripped)
+    t_vis = len(_strip_ansi(title))
+    s_vis = len(_strip_ansi(subtitle)) if subtitle else 0
+    content_w = max(t_vis, s_vis)
+    inner = max(44, min(72, content_w + 4)) if not width else (width - 2)
+
     top    = f"  ╭{'─' * inner}╮"
-    t_line = f"  │  {BOLD}{title}{RESET}"
-    t_pad  = inner - 2 - len(title)
-    t_line += " " * max(0, t_pad) + "│"
+    t_line = f"  │  {BOLD}{title}{RESET}" + " " * max(0, inner - 2 - t_vis) + "│"
 
     if subtitle:
-        s_line = f"  │  {DIM}{subtitle}{RESET}"
-        s_pad  = inner - 2 - len(subtitle)
-        s_line += " " * max(0, s_pad) + "│"
+        s_line = f"  │  {DIM}{subtitle}{RESET}" + " " * max(0, inner - 2 - s_vis) + "│"
         bottom = f"  ╰{'─' * inner}╯"
         return f"{top}\n{t_line}\n{s_line}\n{bottom}"
 
