@@ -1,5 +1,7 @@
 # Agentrace
 
+![agentrace demo](demo.gif)
+
 **Observability for Claude Code sessions.**
 
 When your team starts using AI agents seriously — skills, knowledge trees, context
