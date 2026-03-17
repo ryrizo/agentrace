@@ -45,21 +45,22 @@ iTerm2 → Scripts → agentrace_statusbar (running)
 ```
 iTerm2 → Settings → Profiles → [your profile] → Session → Status Bar Enabled ✅
 → Configure Status Bar
-→ Drag "Agentrace" from Available Components into the bar
+→ Drag "Interpolated String" into the Active Components bar
+→ Double-click it and set the value to: \(user.agentrace_status)
 → OK
 ```
 
-**Optional: Filter to a project**
-
-Click the Agentrace component in the Configure Status Bar dialog to set a
-project path filter (e.g. `/Users/you/workspace/myproject`). When set, only
-sessions from that project are shown.
+Note: uses `\(user.agentrace_status)` (a session variable, no parentheses after
+the name) rather than a custom component — this is more compatible with newer
+versions of the iterm2 Python package (Python 3.14+).
 
 ### How it works
 
-The script runs in iTerm2's own Python environment and reads
-`~/.claude/projects/` directly — the same NDJSON files the CLI parses.
-It's fully self-contained: no `agentrace` import needed, no network calls.
+The script polls `~/.claude/projects/` every 30 seconds and writes the status
+string to `user.agentrace_status` on all open sessions. The Interpolated String
+component reads that variable and displays it in the bar.
+
+Fully self-contained: no `agentrace` import needed, no network calls.
 
 ### Uninstall
 
