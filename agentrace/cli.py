@@ -186,6 +186,47 @@ def cmd_stats(project: str | None = None):
     for fp, count in top_files:
         bar = "█" * min(count, 40)
         print(f"   {count:>4}x  {bar}  {_short(fp)}")
+
+    # ── Sessions over time ──────────────────────────────────────────────────
+    # Sort oldest → newest so the trend reads left to right
+    chronological = sorted(
+        [s for s in sessions if s.started_at],
+        key=lambda s: s.started_at or ""
+    )
+    if chronological:
+        max_tokens = max(s.usage.total for s in chronological) or 1
+        BAR_WIDTH = 28
+
+        print(f"\n── Sessions over time")
+        for s in chronological:
+            idx = sessions.index(s) + 1
+            bar_len = max(1, round(s.usage.total / max_tokens * BAR_WIDTH))
+            bar = "█" * bar_len
+            cache_p = 0
+            if s.usage.total_input > 0:
+                cache_p = s.usage.cache_read_tokens / s.usage.total_input * 100
+            dur = f"{s.duration_seconds/60:.0f}m" if s.duration_seconds else "?"
+            slug_hint = f"  {s.slug}" if s.slug else ""
+            print(
+                f"   #{idx:<3} {s.date}  {bar:<{BAR_WIDTH}}  "
+                f"{_fmt_tokens(s.usage.total):>6}  "
+                f"cache {cache_p:>2.0f}%  "
+                f"{len(s.unique_files)} files  {dur}"
+                f"{slug_hint}"
+            )
+
+        # Trend: compare avg of first half vs second half
+        if len(chronological) >= 4:
+            mid = len(chronological) // 2
+            first_avg = sum(s.usage.total for s in chronological[:mid]) / mid
+            second_avg = sum(s.usage.total for s in chronological[mid:]) / (len(chronological) - mid)
+            delta_pct = (second_avg - first_avg) / first_avg * 100
+            if abs(delta_pct) >= 5:
+                arrow = "↑" if delta_pct > 0 else "↓"
+                direction = "increasing" if delta_pct > 0 else "decreasing"
+                verdict = "context growing" if delta_pct > 0 else "context shrinking ✓"
+                print(f"\n   {arrow} Tokens per session {direction} {abs(delta_pct):.0f}% — {verdict}")
+
     print()
 
 
