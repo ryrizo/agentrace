@@ -30,6 +30,7 @@ from . import cmd_files as _cmd_files
 from . import cmd_tree as _cmd_tree
 from . import cmd_recommend as _cmd_recommend
 from . import cmd_diff as _cmd_diff
+from . import cmd_water as _cmd_water
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -483,6 +484,10 @@ COMMANDS
       trends. Shows whether each context change actually helped reduce
       token usage.
 
+  water [PROJECT]
+      Estimate water consumption equivalent for your token usage.
+      Based on data center cooling research (~22,500 gal / 1B tokens).
+
   help
       Show this message.
 
@@ -506,6 +511,7 @@ EXAMPLES
   agentrace tree
   agentrace recommend
   agentrace diff
+  agentrace water
 """)
 
 
@@ -566,9 +572,13 @@ def main():
         project, _ = _resolve_project(rest)
         _cmd_diff.run(project)
 
+    elif cmd == "water":
+        project, _ = _resolve_project(rest)
+        _cmd_water.run(project)
+
     else:
         print(f"Unknown command: {cmd}")
-        print("Commands: projects, sessions, show, stats, compare, files, watch, recommend, diff")
+        print("Commands: projects, sessions, show, stats, compare, files, watch, recommend, diff, water")
 
 
 if __name__ == "__main__":

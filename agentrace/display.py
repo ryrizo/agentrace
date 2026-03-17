@@ -5,6 +5,7 @@ display.py — Shared display helpers: colors, bars, spinners, boxes.
 import sys
 import time
 import itertools
+import unicodedata
 from pathlib import Path
 
 # ── ANSI ──────────────────────────────────────────────────────────────────────
@@ -105,14 +106,23 @@ def _strip_ansi(s: str) -> str:
     import re
     return re.sub(r"\033\[[0-9;]*m", "", s)
 
+def _visual_width(s: str) -> int:
+    """Return visual column width, accounting for wide Unicode characters (emoji etc.)."""
+    s = _strip_ansi(s)
+    width = 0
+    for c in s:
+        eaw = unicodedata.east_asian_width(c)
+        width += 2 if eaw in ('W', 'F') else 1
+    return width
+
 def box(title: str, subtitle: str = "", width: int = 0) -> str:
     """
     Render a rounded box header. Width auto-sizes to content if width=0.
     Min width 44, max width 72.
     """
-    # Measure visual widths (ANSI-stripped)
-    t_vis = len(_strip_ansi(title))
-    s_vis = len(_strip_ansi(subtitle)) if subtitle else 0
+    # Measure visual widths (ANSI-stripped, emoji-aware)
+    t_vis = _visual_width(title)
+    s_vis = _visual_width(subtitle) if subtitle else 0
     content_w = max(t_vis, s_vis)
     inner = max(44, min(72, content_w + 4)) if not width else (width - 2)
 

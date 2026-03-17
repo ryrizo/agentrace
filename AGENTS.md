@@ -26,6 +26,7 @@ agentrace/
 │   ├── cmd_files.py           ← `agentrace files` — context file cost analysis
 │   ├── cmd_recommend.py       ← `agentrace recommend` — context optimization recommendations
 │   ├── cmd_diff.py            ← `agentrace diff` — git correlation for context changes
+│   ├── cmd_water.py           ← `agentrace water` — water consumption impact report
 │   └── watcher.py             ← `agentrace watch` — live session monitor
 └── docs/
     └── VISION.md              ← product thinking, data model, roadmap

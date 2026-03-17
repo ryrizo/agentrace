@@ -308,6 +308,49 @@ to measure impact.
   Overall trend across 10 sessions:  27% ↓  (first half avg 1.9M → second half avg 1.3M)
 ```
 
+---
+
+### `agentrace water [PROJECT]`
+
+Estimates the data center water consumption equivalent of your Claude Code token usage,
+based on research showing ~22,500 gallons per 1 billion tokens. Breaks down water impact
+by session and by day, with fun real-world comparisons (water bottles, bathtubs, etc.).
+
+```
+  ╭─────────────────────────────────────────────────────╮
+  │  🌊  Water Impact  all projects                     │
+  │  10 sessions  ·  16.0M tokens  ·  est. 360 gallons  │
+  ╰─────────────────────────────────────────────────────╯
+
+  Roughly equivalent to
+
+  💧  2,727.5  water bottles
+  🛁      7.2  bathtubs
+  🌿     30.0  garden hose minutes
+
+  ──────────────────────────────────────────────────────────
+
+  By session  ·  heaviest first
+
+  #6  2026-03-08  ████████████████████   3.5M   79 gal  ≈ 599 bottles
+  #3  2026-03-09  ███████████████████░   3.3M   75 gal  ≈ 567 bottles
+  #7  2026-03-08  ██████████████░░░░░░   2.4M   55 gal  ≈ 415 bottles
+  #1  2026-03-17  ░░░░░░░░░░░░░░░░░░░░    42k 0.93 gal  ≈   7 bottles
+
+  ──────────────────────────────────────────────────────────
+
+  By day
+
+  2026-03-08  ████████████████████  268 gal  (11.9M tokens, 7 sessions)
+  2026-03-09  ███████░░░░░░░░░░░░░   91 gal  (4.1M tokens, 2 sessions)
+  2026-03-17  ░░░░░░░░░░░░░░░░░░░░ 0.93 gal  (42k tokens, 1 session)
+
+  ──────────────────────────────────────────────────────────
+
+  ⚠  Estimate based on ~22,500 gal / 1B tokens (data center cooling research)
+     Actual usage varies by provider, region, and cooling method.
+```
+
 <!-- USAGE:END -->
 
 ---
