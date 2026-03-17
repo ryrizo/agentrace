@@ -7,6 +7,7 @@ Usage:
     agentrace show SESSION                Full detail (number, UUID prefix, or slug)
     agentrace stats [PROJECT]             Aggregate stats + most-loaded files
     agentrace compare SESSION_A SESSION_B Diff two sessions
+    agentrace files [PROJECT]             Context file cost analysis
     agentrace watch [PROJECT]             Live session monitor
 
 PROJECT can be a path (/Users/ryan/workspace/foo) or omitted to auto-detect from cwd.
@@ -20,6 +21,7 @@ from .parser import (
     resolve_session_ref, list_projects, detect_project, Session
 )
 from .watcher import watch as _watch
+from . import cmd_files as _cmd_files
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -405,6 +407,10 @@ def main():
             return
         project, _ = _resolve_project(rest[2:])
         cmd_compare(rest[0], rest[1], project)
+
+    elif cmd == "files":
+        project, _ = _resolve_project(rest)
+        _cmd_files.run(project)
 
     elif cmd == "watch":
         project, _ = _resolve_project(rest)
