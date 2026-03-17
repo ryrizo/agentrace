@@ -8,7 +8,6 @@ Each line is a JSON object representing one event in the session.
 """
 
 import json
-import os
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -73,8 +72,178 @@ class Session:
                 out.append(f.path)
         return out
 
+    @property
+    def project_name(self) -> str:
+        """Human-readable project name from cwd."""
+        return Path(self.cwd).name if self.cwd else "unknown"
 
-# ── Parser ────────────────────────────────────────────────────────────────────
+    @property
+    def date(self) -> str:
+        if not self.started_at:
+            return "?"
+        return self.started_at[:10]
+
+
+# ── Projects directory ────────────────────────────────────────────────────────
+
+def get_projects_dir() -> Path:
+    return Path.home() / ".claude" / "projects"
+
+
+def _real_cwd_from_dir(project_dir: Path) -> Optional[str]:
+    """Read the actual cwd from any event in any session file in this dir."""
+    for f in project_dir.glob("*.jsonl"):
+        try:
+            with open(f) as fh:
+                for line in fh:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    event = json.loads(line)
+                    cwd = event.get("cwd")
+                    if cwd:
+                        return cwd
+        except Exception:
+            continue
+    return None
+
+
+@dataclass
+class ProjectSummary:
+    escaped_name: str
+    real_path: str
+    session_count: int
+    total_tokens: int
+    last_active: Optional[str]
+
+
+def list_projects() -> list[ProjectSummary]:
+    """List all Claude Code projects with aggregate stats."""
+    d = get_projects_dir()
+    if not d.exists():
+        return []
+
+    results = []
+    for project_dir in sorted(d.iterdir()):
+        if not project_dir.is_dir():
+            continue
+        files = list(project_dir.glob("*.jsonl"))
+        if not files:
+            continue
+
+        real_path = _real_cwd_from_dir(project_dir) or project_dir.name
+        total_tokens = 0
+        last_active = None
+
+        for f in files:
+            try:
+                s = parse_session_file(f)
+                total_tokens += s.usage.total
+                if s.ended_at:
+                    if last_active is None or s.ended_at > last_active:
+                        last_active = s.ended_at
+            except Exception:
+                continue
+
+        results.append(ProjectSummary(
+            escaped_name=project_dir.name,
+            real_path=real_path,
+            session_count=len(files),
+            total_tokens=total_tokens,
+            last_active=last_active[:10] if last_active else None,
+        ))
+
+    results.sort(key=lambda p: p.last_active or "", reverse=True)
+    return results
+
+
+# ── Session finder ────────────────────────────────────────────────────────────
+
+def find_sessions(project_path: Optional[str] = None,
+                  claude_dir: Optional[Path] = None) -> list[Path]:
+    """
+    Find Claude Code session files.
+
+    project_path: real filesystem path (e.g. /Users/ryan/workspace/capacity)
+                  If None, returns sessions for ALL projects.
+    claude_dir:   override for ~/.claude/projects/
+    """
+    if claude_dir is None:
+        claude_dir = get_projects_dir()
+
+    if not claude_dir.exists():
+        return []
+
+    if project_path:
+        escaped = project_path.replace("/", "-").lstrip("-")
+        project_dir = claude_dir / escaped
+        if not project_dir.exists():
+            return []
+        dirs = [project_dir]
+    else:
+        dirs = [d for d in claude_dir.iterdir() if d.is_dir()]
+
+    files = []
+    for d in dirs:
+        files.extend(d.glob("*.jsonl"))
+
+    return files
+
+
+def detect_project() -> Optional[str]:
+    """
+    Auto-detect the current project from cwd.
+    Returns the real path if a matching Claude Code project directory exists.
+    """
+    import os
+    cwd = os.getcwd()
+    escaped = cwd.replace("/", "-").lstrip("-")
+    project_dir = get_projects_dir() / escaped
+    if project_dir.exists() and any(project_dir.glob("*.jsonl")):
+        return cwd
+    return None
+
+
+# ── Session loader with numbering ─────────────────────────────────────────────
+
+def load_sessions_sorted(project_path: Optional[str] = None) -> list[Session]:
+    """Load all sessions sorted by date descending (index 0 = most recent = #1)."""
+    files = find_sessions(project_path)
+    sessions = []
+    for f in files:
+        try:
+            sessions.append(parse_session_file(f))
+        except Exception:
+            continue
+    sessions.sort(key=lambda s: s.started_at or "", reverse=True)
+    return sessions
+
+
+def resolve_session_ref(ref: str, sessions: list[Session]) -> Optional[Session]:
+    """
+    Resolve a session reference to a Session.
+
+    Accepts:
+      - A 1-based integer index: "1" = most recent, "2" = second most recent, …
+      - A UUID prefix: "e927ea8e" matches session starting with that string
+      - A slug prefix: "mighty" matches slug starting with that string
+    """
+    # Try numeric index
+    if ref.isdigit():
+        idx = int(ref) - 1
+        if 0 <= idx < len(sessions):
+            return sessions[idx]
+        return None
+
+    # Try UUID or slug prefix
+    for s in sessions:
+        if s.session_id.startswith(ref) or (s.slug and s.slug.startswith(ref)):
+            return s
+
+    return None
+
+
+# ── File parser ───────────────────────────────────────────────────────────────
 
 def parse_session_file(path: Path) -> Session:
     """Parse a single Claude Code NDJSON session file into a Session."""
@@ -92,7 +261,6 @@ def parse_session_file(path: Path) -> Session:
     if not events:
         raise ValueError(f"No events found in {path}")
 
-    # Pull session metadata from first event
     first = events[0]
     session_id = first.get("sessionId", path.stem)
     slug = first.get("slug", "")
@@ -103,7 +271,6 @@ def parse_session_file(path: Path) -> Session:
     started_at = min(timestamps) if timestamps else None
     ended_at = max(timestamps) if timestamps else None
 
-    # Extract model from first assistant message
     model = None
     for e in events:
         msg = e.get("message", {})
@@ -112,7 +279,6 @@ def parse_session_file(path: Path) -> Session:
             if model:
                 break
 
-    # Accumulate token usage across all assistant messages
     usage = TokenUsage()
     for e in events:
         msg = e.get("message", {})
@@ -126,7 +292,6 @@ def parse_session_file(path: Path) -> Session:
         usage.cache_creation_tokens += u.get("cache_creation_input_tokens", 0)
         usage.cache_read_tokens += u.get("cache_read_input_tokens", 0)
 
-    # Extract context files from Read tool calls
     context_files = []
     for e in events:
         timestamp = e.get("timestamp", "")
@@ -149,33 +314,3 @@ def parse_session_file(path: Path) -> Session:
         context_files=context_files,
         usage=usage,
     )
-
-
-def find_sessions(project_path: Optional[str] = None, claude_dir: Optional[Path] = None) -> list[Path]:
-    """
-    Find Claude Code session files for a given project path.
-
-    If project_path is None, returns sessions for ALL projects.
-    claude_dir defaults to ~/.claude/projects/
-    """
-    if claude_dir is None:
-        claude_dir = Path.home() / ".claude" / "projects"
-
-    if not claude_dir.exists():
-        return []
-
-    if project_path:
-        # Escape the project path the same way Claude Code does
-        escaped = project_path.replace("/", "-").lstrip("-")
-        project_dir = claude_dir / escaped
-        if not project_dir.exists():
-            return []
-        dirs = [project_dir]
-    else:
-        dirs = [d for d in claude_dir.iterdir() if d.is_dir()]
-
-    files = []
-    for d in dirs:
-        files.extend(sorted(d.glob("*.jsonl")))
-
-    return files

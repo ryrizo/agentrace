@@ -40,7 +40,21 @@ configuration and no external services.
 
 <!-- USAGE:START — auto-updated by agents. Do not edit this block manually. -->
 
-### `agentrace sessions [PROJECT_PATH]`
+### `agentrace projects`
+
+List all Claude Code projects with session counts, total tokens, and last active date.
+Auto-detects real project paths from session metadata — no escaped directory names.
+
+```
+#    PROJECT                            SESSIONS       TOKENS  LAST ACTIVE
+--------------------------------------------------------------------------
+1    ~/workspace/capacity                      8        12.7M   2026-03-17
+2    ~/workspace/capacity/frontend             2         3.3M   2026-03-08
+```
+
+---
+
+### `agentrace sessions [PROJECT]`
 
 List recent Claude Code sessions with token counts, file counts, and duration.
 
