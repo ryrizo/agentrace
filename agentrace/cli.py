@@ -23,6 +23,7 @@ from .parser import (
 from .cost import session_cost, fmt_cost
 from .watcher import watch as _watch
 from . import cmd_files as _cmd_files
+from . import cmd_tree as _cmd_tree
 from . import cmd_recommend as _cmd_recommend
 from . import cmd_diff as _cmd_diff
 
@@ -378,6 +379,11 @@ COMMANDS
       start, then tails it in real-time — file loads, edits, execs,
       and running token count. Run in a split terminal alongside Claude.
 
+  tree [PROJECT]
+      Detect co-load clusters across sessions and visualize your context
+      tree. Shows which files are loaded together, estimates token savings,
+      and optionally writes a CLAUDE.md skeleton to encode the tree.
+
   recommend [PROJECT]
       Analyze context file usage and produce actionable recommendations:
       what to pin in CLAUDE.md, what to load on-demand, what to split,
@@ -450,6 +456,10 @@ def main():
     elif cmd == "files":
         project, _ = _resolve_project(rest)
         _cmd_files.run(project)
+
+    elif cmd == "tree":
+        project, _ = _resolve_project(rest)
+        _cmd_tree.run(project)
 
     elif cmd == "watch":
         project, _ = _resolve_project(rest)
