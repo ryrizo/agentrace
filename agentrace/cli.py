@@ -31,6 +31,7 @@ from . import cmd_tree as _cmd_tree
 from . import cmd_recommend as _cmd_recommend
 from . import cmd_diff as _cmd_diff
 from . import cmd_water as _cmd_water
+from . import cmd_report as _cmd_report
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -609,6 +610,10 @@ COMMANDS
       Estimate water consumption equivalent for your token usage.
       Based on data center cooling research (~22,500 gal / 1B tokens).
 
+  report [PROJECT]
+      Generate a self-contained HTML report — shareable with your team.
+      Includes session timeline, top files, water impact, and recommendations.
+
   help
       Show this message.
 
@@ -633,6 +638,7 @@ EXAMPLES
   agentrace recommend
   agentrace diff
   agentrace water
+  agentrace report
 """)
 
 
@@ -697,9 +703,13 @@ def main():
         project, _ = _resolve_project(rest)
         _cmd_water.run(project)
 
+    elif cmd == "report":
+        project, _ = _resolve_project(rest)
+        _cmd_report.run(project)
+
     else:
         print(f"Unknown command: {cmd}")
-        print("Commands: projects, sessions, show, stats, compare, files, watch, recommend, diff, water")
+        print("Commands: projects, sessions, show, stats, compare, files, watch, recommend, diff, water, report")
 
 
 if __name__ == "__main__":
