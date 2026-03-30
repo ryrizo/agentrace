@@ -170,6 +170,10 @@ def cmd_sessions(project: str | None = None):
 
         print(f"  {num_display}  {date_display}  {slug_display}  {files_display}  {tok_display}  {cost_display}  {dur_display}")
 
+        # Session name subtitle
+        if s.name:
+            print(f"  {'':5}  {'':12}  {DIM}{s.name}{RESET}")
+
     print()
     print(f"  {DIM}agentrace show 1  ·  agentrace compare 2 5  ·  agentrace watch{RESET}")
     print()
@@ -188,6 +192,8 @@ def cmd_show(ref: str, project: str | None = None):
         cache_pct = s.usage.cache_read_tokens / s.usage.total_input * 100
 
     print(f"\n── Session #{idx}  {s.slug or ''}")
+    if s.name:
+        print(f"   Name:     {s.name}")
     print(f"   ID:       {s.session_id}")
     print(f"   Project:  {_short(s.cwd)}")
     print(f"   Branch:   {s.git_branch or '—'}")

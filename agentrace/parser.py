@@ -8,6 +8,7 @@ Each line is a JSON object representing one event in the session.
 """
 
 import json
+import re
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -47,6 +48,7 @@ class Session:
     model: Optional[str]
     started_at: Optional[str]
     ended_at: Optional[str]
+    name: Optional[str] = None
     context_files: list[ContextFile] = field(default_factory=list)
     usage: TokenUsage = field(default_factory=TokenUsage)
 
@@ -243,6 +245,66 @@ def resolve_session_ref(ref: str, sessions: list[Session]) -> Optional[Session]:
     return None
 
 
+# ── Name inference ────────────────────────────────────────────────────────────
+
+_BOILERPLATE_RE = re.compile(
+    r"^Read\s+(AGENTS|CLAUDE)\.md\b", re.IGNORECASE
+)
+
+
+def _first_meaningful_line(text: str) -> Optional[str]:
+    """Return the first non-empty, non-boilerplate line from text."""
+    for line in text.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        # Strip leading markdown header markers
+        line = re.sub(r"^#+\s*", "", line).strip()
+        if not line:
+            continue
+        if _BOILERPLATE_RE.match(line):
+            continue
+        return line[:60].rstrip()
+    return None
+
+
+def _infer_session_name(events: list[dict]) -> Optional[str]:
+    """
+    Infer a human-readable session name from the first task prompt.
+
+    Strategy:
+      1. Look for a queue-operation / enqueue event with a content field.
+      2. Fall back to the first user message's first text block.
+    """
+    # Strategy 1: queue-operation enqueue
+    for e in events:
+        if e.get("type") == "queue-operation" and e.get("operation") == "enqueue":
+            content = e.get("content", "")
+            if content:
+                name = _first_meaningful_line(content)
+                if name:
+                    return name
+
+    # Strategy 2: first user message
+    for e in events:
+        msg = e.get("message", {})
+        if not isinstance(msg, dict) or msg.get("role") != "user":
+            continue
+        content = msg.get("content")
+        if isinstance(content, list):
+            for block in content:
+                if isinstance(block, dict) and block.get("type") == "text":
+                    name = _first_meaningful_line(block.get("text", ""))
+                    if name:
+                        return name
+        elif isinstance(content, str) and content:
+            name = _first_meaningful_line(content)
+            if name:
+                return name
+
+    return None
+
+
 # ── File parser ───────────────────────────────────────────────────────────────
 
 def parse_session_file(path: Path) -> Session:
@@ -311,6 +373,7 @@ def parse_session_file(path: Path) -> Session:
         model=model,
         started_at=started_at,
         ended_at=ended_at,
+        name=_infer_session_name(events),
         context_files=context_files,
         usage=usage,
     )
