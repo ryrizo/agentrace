@@ -51,6 +51,18 @@ class Session:
     name: Optional[str] = None
     context_files: list[ContextFile] = field(default_factory=list)
     usage: TokenUsage = field(default_factory=TokenUsage)
+    subagent_usage: TokenUsage = field(default_factory=TokenUsage)
+    subagent_count: int = 0
+
+    @property
+    def total_usage(self) -> TokenUsage:
+        """Combined usage: session + all subagents."""
+        return TokenUsage(
+            input_tokens=self.usage.input_tokens + self.subagent_usage.input_tokens,
+            output_tokens=self.usage.output_tokens + self.subagent_usage.output_tokens,
+            cache_creation_tokens=self.usage.cache_creation_tokens + self.subagent_usage.cache_creation_tokens,
+            cache_read_tokens=self.usage.cache_read_tokens + self.subagent_usage.cache_read_tokens,
+        )
 
     @property
     def duration_seconds(self) -> Optional[float]:
@@ -140,7 +152,7 @@ def list_projects() -> list[ProjectSummary]:
         for f in files:
             try:
                 s = parse_session_file(f)
-                total_tokens += s.usage.total
+                total_tokens += s.total_usage.total
                 if s.ended_at:
                     if last_active is None or s.ended_at > last_active:
                         last_active = s.ended_at
@@ -315,6 +327,64 @@ def _infer_session_name(events: list[dict]) -> Optional[str]:
     return None
 
 
+# ── Usage helpers ────────────────────────────────────────────────────────────
+
+def _accumulate_usage(events: list[dict]) -> TokenUsage:
+    """Sum token usage across all message events."""
+    usage = TokenUsage()
+    for e in events:
+        msg = e.get("message", {})
+        if not isinstance(msg, dict):
+            continue
+        u = msg.get("usage", {})
+        if not u:
+            continue
+        usage = TokenUsage(
+            input_tokens=usage.input_tokens + u.get("input_tokens", 0),
+            output_tokens=usage.output_tokens + u.get("output_tokens", 0),
+            cache_creation_tokens=usage.cache_creation_tokens + u.get("cache_creation_input_tokens", 0),
+            cache_read_tokens=usage.cache_read_tokens + u.get("cache_read_input_tokens", 0),
+        )
+    return usage
+
+
+def _parse_subagents(session_path: Path) -> tuple[TokenUsage, int]:
+    """
+    Parse subagent JSONL files for a session.
+
+    Subagents live at: {session_path.parent}/{session_path.stem}/subagents/*.jsonl
+    """
+    subagents_dir = session_path.parent / session_path.stem / "subagents"
+    if not subagents_dir.is_dir():
+        return TokenUsage(), 0
+
+    combined = TokenUsage()
+    count = 0
+    for f in subagents_dir.glob("*.jsonl"):
+        events = []
+        try:
+            with open(f) as fh:
+                for line in fh:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    events.append(json.loads(line))
+        except Exception:
+            continue
+        if not events:
+            continue
+        sub_usage = _accumulate_usage(events)
+        combined = TokenUsage(
+            input_tokens=combined.input_tokens + sub_usage.input_tokens,
+            output_tokens=combined.output_tokens + sub_usage.output_tokens,
+            cache_creation_tokens=combined.cache_creation_tokens + sub_usage.cache_creation_tokens,
+            cache_read_tokens=combined.cache_read_tokens + sub_usage.cache_read_tokens,
+        )
+        count += 1
+
+    return combined, count
+
+
 # ── File parser ───────────────────────────────────────────────────────────────
 
 def parse_session_file(path: Path) -> Session:
@@ -351,18 +421,8 @@ def parse_session_file(path: Path) -> Session:
             if model:
                 break
 
-    usage = TokenUsage()
-    for e in events:
-        msg = e.get("message", {})
-        if not isinstance(msg, dict):
-            continue
-        u = msg.get("usage", {})
-        if not u:
-            continue
-        usage.input_tokens += u.get("input_tokens", 0)
-        usage.output_tokens += u.get("output_tokens", 0)
-        usage.cache_creation_tokens += u.get("cache_creation_input_tokens", 0)
-        usage.cache_read_tokens += u.get("cache_read_input_tokens", 0)
+    usage = _accumulate_usage(events)
+    subagent_usage, subagent_count = _parse_subagents(path)
 
     context_files = []
     for e in events:
@@ -386,4 +446,6 @@ def parse_session_file(path: Path) -> Session:
         name=_infer_session_name(events),
         context_files=context_files,
         usage=usage,
+        subagent_usage=subagent_usage,
+        subagent_count=subagent_count,
     )

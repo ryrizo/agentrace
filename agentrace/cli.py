@@ -119,9 +119,9 @@ def cmd_sessions(project: str | None = None):
         return
 
     scope = _short(project) if project else "all projects"
-    total_tokens = sum(s.usage.total for s in sessions)
+    total_tokens = sum(s.total_usage.total for s in sessions)
     total_cost = sum(session_cost(s) for s in sessions)
-    max_tok = max(s.usage.total for s in sessions) or 1
+    max_tok = max(s.total_usage.total for s in sessions) or 1
 
     print()
     print(box(
@@ -151,11 +151,14 @@ def cmd_sessions(project: str | None = None):
             inner = f"({s.session_id[:8]})"
             slug_display = f"{DIM}{inner}{RESET}" + " " * (32 - len(inner))
 
-        # FILES — right-aligned to 5
-        files_display = f"{len(s.unique_files):>5}"
+        # FILES + optional agent count
+        files_str = f"{len(s.unique_files)} files"
+        if s.subagent_count > 0:
+            files_str += f"  {DIM}+{s.subagent_count} agent{'s' if s.subagent_count != 1 else ''}{RESET}"
+        files_display = files_str
 
         # TOKENS — mini_bar (width 8) + BOLD colored token count (right-aligned to 7)
-        tok = s.usage.total
+        tok = s.total_usage.total
         tok_color = GREEN if tok < 500_000 else (YELLOW if tok < 2_000_000 else RED)
         tok_str = fmt_tokens(tok)
         bar = mini_bar(tok / max_tok, width=8)
@@ -187,9 +190,10 @@ def cmd_show(ref: str, project: str | None = None):
         return
 
     idx = sessions.index(s) + 1
+    tu = s.total_usage
     cache_pct = 0
-    if s.usage.total_input > 0:
-        cache_pct = s.usage.cache_read_tokens / s.usage.total_input * 100
+    if tu.total_input > 0:
+        cache_pct = tu.cache_read_tokens / tu.total_input * 100
 
     print(f"\n── Session #{idx}  {s.slug or ''}")
     if s.name:
@@ -203,11 +207,23 @@ def cmd_show(ref: str, project: str | None = None):
         print(f"   Duration: {s.duration_seconds / 60:.1f} min")
 
     print(f"\n── Tokens")
-    print(f"   Input (fresh):   {s.usage.input_tokens:>10,}")
-    print(f"   Cache created:   {s.usage.cache_creation_tokens:>10,}")
-    print(f"   Cache hits:      {s.usage.cache_read_tokens:>10,}  ({cache_pct:.0f}% of input)")
-    print(f"   Output:          {s.usage.output_tokens:>10,}")
-    print(f"   Total:           {s.usage.total:>10,}")
+    if s.subagent_count > 0:
+        print(f"   Orchestrator:")
+        print(f"     Input (fresh):  {s.usage.input_tokens:>10,}")
+        print(f"     Cache hits:     {s.usage.cache_read_tokens:>10,}")
+        print(f"     Output:         {s.usage.output_tokens:>10,}")
+        print(f"   Subagents ({s.subagent_count}):")
+        print(f"     Input (fresh):  {s.subagent_usage.input_tokens:>10,}")
+        print(f"     Cache hits:     {s.subagent_usage.cache_read_tokens:>10,}")
+        print(f"     Output:         {s.subagent_usage.output_tokens:>10,}")
+        print(f"   {'─' * 17}")
+        print(f"   Total:            {tu.total:>10,}  ({cache_pct:.0f}% cache hits)")
+    else:
+        print(f"   Input (fresh):   {s.usage.input_tokens:>10,}")
+        print(f"   Cache created:   {s.usage.cache_creation_tokens:>10,}")
+        print(f"   Cache hits:      {s.usage.cache_read_tokens:>10,}  ({cache_pct:.0f}% of input)")
+        print(f"   Output:          {s.usage.output_tokens:>10,}")
+        print(f"   Total:           {tu.total:>10,}")
 
     cost = session_cost(s)
     model_short = (s.model or "?").replace("claude-", "").replace("anthropic/", "")
@@ -232,11 +248,11 @@ def cmd_stats(project: str | None = None):
         return
 
     # ── Compute aggregates ──────────────────────────────────────────────────
-    total_tokens = sum(s.usage.total for s in sessions)
+    total_tokens = sum(s.total_usage.total for s in sessions)
     avg_tokens   = total_tokens // len(sessions)
     avg_files    = sum(len(s.unique_files) for s in sessions) // len(sessions)
-    total_input  = sum(s.usage.total_input for s in sessions)
-    total_cache  = sum(s.usage.cache_read_tokens for s in sessions)
+    total_input  = sum(s.total_usage.total_input for s in sessions)
+    total_cache  = sum(s.total_usage.cache_read_tokens for s in sessions)
     cache_pct    = (total_cache / total_input * 100) if total_input > 0 else 0
     total_cost   = sum(session_cost(s) for s in sessions)
     avg_cost     = total_cost / len(sessions) if sessions else 0.0
@@ -320,19 +336,19 @@ def cmd_stats(project: str | None = None):
         print(rule())
         print(section("Sessions over time"))
 
-        max_tok = max(s.usage.total for s in chronological) or 1
+        max_tok = max(s.total_usage.total for s in chronological) or 1
 
         for s in chronological:
             idx = sessions.index(s) + 1
-            bar = mini_bar(s.usage.total / max_tok, width=24)
+            bar = mini_bar(s.total_usage.total / max_tok, width=24)
             cache_p = 0.0
-            if s.usage.total_input > 0:
-                cache_p = s.usage.cache_read_tokens / s.usage.total_input * 100
+            if s.total_usage.total_input > 0:
+                cache_p = s.total_usage.cache_read_tokens / s.total_usage.total_input * 100
             dur = f"{s.duration_seconds/60:.0f}m" if s.duration_seconds else "?"
             cost_s = session_cost(s)
             print(
                 f"  {DIM}#{idx:<3}{RESET}  {DIM}{s.date}{RESET}  {bar}  "
-                f"{BOLD}{fmt_tokens(s.usage.total):>6}{RESET}  "
+                f"{BOLD}{fmt_tokens(s.total_usage.total):>6}{RESET}  "
                 f"{GOLD}{fmt_cost(cost_s):>7}{RESET}  "
                 f"{DIM}cache{RESET} {cache_p:>2.0f}%  "
                 f"{DIM}{dur}{RESET}"
@@ -346,8 +362,8 @@ def cmd_stats(project: str | None = None):
         print(rule())
         if len(chronological) >= 4:
             mid = len(chronological) // 2
-            first_avg  = sum(s.usage.total for s in chronological[:mid]) / mid
-            second_avg = sum(s.usage.total for s in chronological[mid:]) / (len(chronological) - mid)
+            first_avg  = sum(s.total_usage.total for s in chronological[:mid]) / mid
+            second_avg = sum(s.total_usage.total for s in chronological[mid:]) / (len(chronological) - mid)
             delta_pct  = (second_avg - first_avg) / first_avg * 100
             if abs(delta_pct) >= 5:
                 arrow     = "↑" if delta_pct > 0 else "↓"
@@ -420,8 +436,8 @@ def cmd_compare(ref_a: str, ref_b: str, project: str | None = None):
 
     cost_a = session_cost(a)
     cost_b = session_cost(b)
-    a_cache = (a.usage.cache_read_tokens / a.usage.total_input * 100) if a.usage.total_input else 0
-    b_cache = (b.usage.cache_read_tokens / b.usage.total_input * 100) if b.usage.total_input else 0
+    a_cache = (a.total_usage.cache_read_tokens / a.total_usage.total_input * 100) if a.total_usage.total_input else 0
+    b_cache = (b.total_usage.cache_read_tokens / b.total_usage.total_input * 100) if b.total_usage.total_input else 0
 
     def _delta_bar(va: float, vb: float) -> str:
         max_val = max(abs(va), abs(vb)) if max(abs(va), abs(vb)) > 0 else 1
@@ -446,11 +462,11 @@ def cmd_compare(ref_a: str, ref_b: str, project: str | None = None):
             f"  {bar}  {BOLD}{delta_color}{delta_str:>12}{RESET}{flag}"
         )
 
-    int_row("Total", a.usage.total, b.usage.total)
-    int_row("Input (fresh)", a.usage.input_tokens, b.usage.input_tokens)
-    int_row("Cache created", a.usage.cache_creation_tokens, b.usage.cache_creation_tokens)
-    int_row("Cache hits", a.usage.cache_read_tokens, b.usage.cache_read_tokens, lower_is_better=False)
-    int_row("Output", a.usage.output_tokens, b.usage.output_tokens)
+    int_row("Total", a.total_usage.total, b.total_usage.total)
+    int_row("Input (fresh)", a.total_usage.input_tokens, b.total_usage.input_tokens)
+    int_row("Cache created", a.total_usage.cache_creation_tokens, b.total_usage.cache_creation_tokens)
+    int_row("Cache hits", a.total_usage.cache_read_tokens, b.total_usage.cache_read_tokens, lower_is_better=False)
+    int_row("Output", a.total_usage.output_tokens, b.total_usage.output_tokens)
 
     # Est. cost row — A and B in GOLD
     cost_delta = cost_b - cost_a
@@ -537,14 +553,14 @@ def cmd_compare(ref_a: str, ref_b: str, project: str | None = None):
     print(rule(60))
     print()
 
-    delta_t = b.usage.total - a.usage.total
+    delta_t = b.total_usage.total - a.total_usage.total
     delta_f = len(set_b) - len(set_a)
 
     if delta_t < 0:
-        pct = abs(delta_t) / a.usage.total * 100 if a.usage.total > 0 else 0
+        pct = abs(delta_t) / a.total_usage.total * 100 if a.total_usage.total > 0 else 0
         print(f"  {GREEN}✓ B used {abs(delta_t):,} fewer tokens ({pct:.0f}% reduction){RESET}")
     elif delta_t > 0:
-        pct = delta_t / a.usage.total * 100 if a.usage.total > 0 else 0
+        pct = delta_t / a.total_usage.total * 100 if a.total_usage.total > 0 else 0
         print(f"  {RED}✗ B used {delta_t:,} more tokens ({pct:.0f}% increase){RESET}")
     else:
         print(f"  {DIM}Token usage identical{RESET}")

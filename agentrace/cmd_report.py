@@ -79,7 +79,7 @@ def _svg_sessions_chart(sessions: list, width: int = 800, height: int = 180) -> 
     # Sort chronologically
     sorted_sessions = sorted(dated, key=lambda s: (s.started_at or s.date or ""))
 
-    max_tok = max(s.usage.total for s in sorted_sessions) or 1
+    max_tok = max(s.total_usage.total for s in sorted_sessions) or 1
     n = len(sorted_sessions)
 
     # Layout
@@ -97,7 +97,7 @@ def _svg_sessions_chart(sessions: list, width: int = 800, height: int = 180) -> 
     labels = []
 
     for i, s in enumerate(sorted_sessions):
-        tok = s.usage.total
+        tok = s.total_usage.total
         fraction = tok / max_tok
         bar_h = max(2, int(fraction * chart_h))
         x = pad_left + i * (bar_w + bar_gap)
@@ -112,8 +112,8 @@ def _svg_sessions_chart(sessions: list, width: int = 800, height: int = 180) -> 
 
         cost = session_cost(s)
         cache_pct = 0
-        if s.usage.total_input > 0:
-            cache_pct = s.usage.cache_read_tokens / s.usage.total_input * 100
+        if s.total_usage.total_input > 0:
+            cache_pct = s.total_usage.cache_read_tokens / s.total_usage.total_input * 100
         label = s.name or s.slug or s.session_id[:8]
         tooltip = (
             f"{label} | "
@@ -167,10 +167,10 @@ def _build_html(sessions: list, project_path: str | None) -> str:
         return f"<html><body>No sessions found for {_escape(scope_label)}</body></html>"
 
     # ── Aggregate metrics ────────────────────────────────────────────────────
-    total_tokens = sum(s.usage.total for s in sessions)
+    total_tokens = sum(s.total_usage.total for s in sessions)
     total_cost   = sum(session_cost(s) for s in sessions)
-    total_input  = sum(s.usage.total_input for s in sessions)
-    total_cache  = sum(s.usage.cache_read_tokens for s in sessions)
+    total_input  = sum(s.total_usage.total_input for s in sessions)
+    total_cache  = sum(s.total_usage.cache_read_tokens for s in sessions)
     cache_pct    = (total_cache / total_input * 100) if total_input > 0 else 0.0
     total_gallons = _tokens_to_gallons(total_tokens)
 

@@ -116,7 +116,7 @@ def _session_dt(s: Session) -> datetime | None:
 def _avg_tokens(sessions: list[Session]) -> float:
     if not sessions:
         return 0.0
-    return sum(s.usage.total for s in sessions) / len(sessions)
+    return sum(s.total_usage.total for s in sessions) / len(sessions)
 
 
 def _avg_cost(sessions: list[Session]) -> float:

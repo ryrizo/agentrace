@@ -3,7 +3,7 @@ cost.py — Token cost estimation and $ pricing for Claude models.
 """
 
 from pathlib import Path
-from .parser import Session
+from .parser import Session, TokenUsage
 
 # Pricing per million tokens (as of early 2025)
 # Format: (input_fresh, cache_read, cache_write, output)
@@ -23,17 +23,21 @@ def _model_key(model: str | None) -> str:
         return "haiku"
     return "sonnet"
 
-def session_cost(s: Session) -> float:
-    """Estimate $ cost of a session."""
-    key = _model_key(s.model)
+def usage_cost(usage: "TokenUsage", model: str | None = None) -> float:
+    """Estimate $ cost of a TokenUsage at a given model's pricing."""
+    key = _model_key(model)
     p_in, p_cr, p_cw, p_out = _PRICING[key]
-    cost = (
-        s.usage.input_tokens         / 1_000_000 * p_in +
-        s.usage.cache_read_tokens    / 1_000_000 * p_cr +
-        s.usage.cache_creation_tokens/ 1_000_000 * p_cw +
-        s.usage.output_tokens        / 1_000_000 * p_out
+    return (
+        usage.input_tokens          / 1_000_000 * p_in +
+        usage.cache_read_tokens     / 1_000_000 * p_cr +
+        usage.cache_creation_tokens / 1_000_000 * p_cw +
+        usage.output_tokens         / 1_000_000 * p_out
     )
-    return cost
+
+
+def session_cost(s: Session) -> float:
+    """Estimate $ cost of a session (orchestrator + subagents)."""
+    return usage_cost(s.total_usage, s.model)
 
 def fmt_cost(dollars: float) -> str:
     if dollars < 0.01:

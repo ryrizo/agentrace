@@ -63,7 +63,7 @@ def run(project: str | None = None):
         return
 
     scope = short(project) if project else "all projects"
-    total_tokens = sum(s.usage.total for s in sessions)
+    total_tokens = sum(s.total_usage.total for s in sessions)
     total_gallons = _tokens_to_gallons(total_tokens)
 
     # ── Header ────────────────────────────────────────────────────────────────
@@ -93,22 +93,22 @@ def run(project: str | None = None):
     print(rule())
     print(section("  By session  ·  heaviest first"))
 
-    sorted_sessions = sorted(sessions, key=lambda s: s.usage.total, reverse=True)
+    sorted_sessions = sorted(sessions, key=lambda s: s.total_usage.total, reverse=True)
     top_sessions = sorted_sessions[:10]
-    max_tokens = top_sessions[0].usage.total if top_sessions else 1
+    max_tokens = top_sessions[0].total_usage.total if top_sessions else 1
 
     # Build index map for display numbers
     session_idx = {s.session_id: i + 1 for i, s in enumerate(sessions)}
 
     for s in top_sessions:
         idx = session_idx.get(s.session_id, "?")
-        fraction = s.usage.total / max_tokens if max_tokens > 0 else 0
+        fraction = s.total_usage.total / max_tokens if max_tokens > 0 else 0
         bar = mini_bar(fraction, width=20)
-        gallons = _tokens_to_gallons(s.usage.total)
+        gallons = _tokens_to_gallons(s.total_usage.total)
         bottles = gallons / 0.132
         print(
             f"  {DIM}#{idx:<3}{RESET}  {DIM}{s.date}{RESET}  {bar}  "
-            f"{BOLD}{fmt_tokens(s.usage.total):>5}{RESET}  "
+            f"{BOLD}{fmt_tokens(s.total_usage.total):>5}{RESET}  "
             f"{CYAN}{BOLD}{_fmt_gallons(gallons):>3} gal{RESET}  "
             f"{DIM}≈ {int(round(bottles)):,} bottles{RESET}"
         )
@@ -123,8 +123,8 @@ def run(project: str | None = None):
         day_map: dict[str, dict] = defaultdict(lambda: {"tokens": 0, "gallons": 0.0, "count": 0})
         for s in sessions:
             d = s.date or "unknown"
-            day_map[d]["tokens"] += s.usage.total
-            day_map[d]["gallons"] += _tokens_to_gallons(s.usage.total)
+            day_map[d]["tokens"] += s.total_usage.total
+            day_map[d]["gallons"] += _tokens_to_gallons(s.total_usage.total)
             day_map[d]["count"] += 1
 
         sorted_days = sorted(day_map.items())
