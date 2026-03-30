@@ -114,8 +114,9 @@ def _svg_sessions_chart(sessions: list, width: int = 800, height: int = 180) -> 
         cache_pct = 0
         if s.usage.total_input > 0:
             cache_pct = s.usage.cache_read_tokens / s.usage.total_input * 100
+        label = s.name or s.slug or s.session_id[:8]
         tooltip = (
-            f"{s.slug or s.session_id[:8]} | "
+            f"{label} | "
             f"{s.date or '?'} | "
             f"{_fmt_tokens(tok)} tokens | "
             f"{fmt_cost(cost)} | "

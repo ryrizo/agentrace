@@ -396,10 +396,10 @@ def cmd_compare(ref_a: str, ref_b: str, project: str | None = None):
     idx_b = sessions.index(b) + 1
 
     def _slug_label(s, idx):
-        slug = s.slug or s.session_id[:8]
-        if len(slug) > 22:
-            slug = slug[:19] + "..."
-        return f"#{idx} {slug} ({s.date})"
+        label = s.name or s.slug or s.session_id[:8]
+        if len(label) > 32:
+            label = label[:29] + "..."
+        return f"#{idx} {label} ({s.date})"
 
     label_a = _slug_label(a, idx_a)
     label_b = _slug_label(b, idx_b)
