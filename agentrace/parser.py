@@ -270,13 +270,23 @@ def _first_meaningful_line(text: str) -> Optional[str]:
 
 def _infer_session_name(events: list[dict]) -> Optional[str]:
     """
-    Infer a human-readable session name from the first task prompt.
+    Resolve a human-readable session name.
 
-    Strategy:
-      1. Look for a queue-operation / enqueue event with a content field.
-      2. Fall back to the first user message's first text block.
+    Strategy (in priority order):
+      1. Explicit /rename via agent-name event  ← authoritative, user-defined
+      2. queue-operation / enqueue content      ← programmatic task prompt
+      3. First user message text block          ← interactive session fallback
     """
-    # Strategy 1: queue-operation enqueue
+    # Strategy 1: explicit /rename — type="agent-name", field="agentName"
+    # Use the LAST one if the user renamed multiple times
+    renamed = None
+    for e in events:
+        if e.get("type") == "agent-name" and e.get("agentName"):
+            renamed = e["agentName"]
+    if renamed:
+        return renamed[:60].rstrip()
+
+    # Strategy 2: queue-operation enqueue
     for e in events:
         if e.get("type") == "queue-operation" and e.get("operation") == "enqueue":
             content = e.get("content", "")
