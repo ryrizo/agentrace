@@ -337,6 +337,9 @@ def cmd_stats(project: str | None = None):
                 f"{DIM}cache{RESET} {cache_p:>2.0f}%  "
                 f"{DIM}{dur}{RESET}"
             )
+            if s.name:
+                name_trunc = s.name[:52] + "…" if len(s.name) > 52 else s.name
+                print(f"  {DIM}      {' ' * 11}  {name_trunc}{RESET}")
 
         # Trend
         print()
