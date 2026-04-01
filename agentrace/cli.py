@@ -631,9 +631,10 @@ COMMANDS
       trends. Shows whether each context change actually helped reduce
       token usage.
 
-  water [PROJECT]
+  water [PROJECT] [--optimist]
       Estimate water consumption equivalent for your token usage.
-      Based on data center cooling research (~22,500 gal / 1B tokens).
+      Default: ~22,500 gal / 1B tokens (Li et al. 2023, conservative baseline).
+      --optimist: ~6,000 gal / 1B tokens (H100-era efficient infra, lower bound).
 
   report [PROJECT]
       Generate a self-contained HTML report — shareable with your team.
@@ -725,8 +726,10 @@ def main():
         _cmd_diff.run(project)
 
     elif cmd == "water":
-        project, _ = _resolve_project(rest)
-        _cmd_water.run(project)
+        optimist = "--optimist" in rest
+        remaining = [r for r in rest if r != "--optimist"]
+        project, _ = _resolve_project(remaining)
+        _cmd_water.run(project, optimist=optimist)
 
     elif cmd == "report":
         project, _ = _resolve_project(rest)

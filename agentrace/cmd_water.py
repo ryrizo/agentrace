@@ -1,8 +1,17 @@
 """
 cmd_water.py — Water consumption impact report.
 
-Estimates data center water usage for your Claude Code token consumption,
-based on research showing ~22,500 gallons per 1 billion tokens.
+Estimates data center water usage for your Claude Code token consumption.
+
+Default estimate: ~22,500 gal / 1B tokens
+  Source: Li et al. (2023) "Making AI Less Thirsty" — UC Riverside.
+  Based on GPT-3/ChatGPT inference at Azure data centers with evaporative cooling.
+  https://arxiv.org/abs/2304.03271
+
+Optimist estimate (--optimist): ~6,000 gal / 1B tokens
+  H100-era hardware is ~3–4× more compute-efficient per watt than A100/V100.
+  Modern data centers increasingly use closed-loop, air, or reclaimed-water cooling.
+  This reflects a reasonable lower bound for efficient 2024–2025 infrastructure.
 """
 
 from collections import defaultdict
@@ -14,7 +23,8 @@ from .display import (
 
 # ── Constants ─────────────────────────────────────────────────────────────────
 
-GALLONS_PER_BILLION_TOKENS = 22_500
+GALLONS_PER_BILLION_TOKENS = 22_500          # Li et al. 2023 — conservative baseline
+GALLONS_PER_BILLION_TOKENS_OPTIMIST = 6_000  # H100-era efficient infra — lower bound
 
 COMPARISONS = [
     ("water bottles",     0.132),    # 500ml
@@ -35,8 +45,9 @@ COMPARISON_EMOJI = {
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
-def _tokens_to_gallons(tokens: int) -> float:
-    return tokens / 1_000_000_000 * GALLONS_PER_BILLION_TOKENS
+def _tokens_to_gallons(tokens: int, optimist: bool = False) -> float:
+    rate = GALLONS_PER_BILLION_TOKENS_OPTIMIST if optimist else GALLONS_PER_BILLION_TOKENS
+    return tokens / 1_000_000_000 * rate
 
 
 def _fmt_count(n: float) -> str:
@@ -54,7 +65,7 @@ def _fmt_gallons(g: float) -> str:
 
 # ── Main command ──────────────────────────────────────────────────────────────
 
-def run(project: str | None = None):
+def run(project: str | None = None, optimist: bool = False):
     with Spinner("Calculating water impact"):
         sessions = load_sessions_sorted(project)
 
@@ -64,7 +75,7 @@ def run(project: str | None = None):
 
     scope = short(project) if project else "all projects"
     total_tokens = sum(s.total_usage.total for s in sessions)
-    total_gallons = _tokens_to_gallons(total_tokens)
+    total_gallons = _tokens_to_gallons(total_tokens, optimist)
 
     # ── Header ────────────────────────────────────────────────────────────────
     print()
@@ -104,7 +115,7 @@ def run(project: str | None = None):
         idx = session_idx.get(s.session_id, "?")
         fraction = s.total_usage.total / max_tokens if max_tokens > 0 else 0
         bar = mini_bar(fraction, width=20)
-        gallons = _tokens_to_gallons(s.total_usage.total)
+        gallons = _tokens_to_gallons(s.total_usage.total, optimist)
         bottles = gallons / 0.132
         print(
             f"  {DIM}#{idx:<3}{RESET}  {DIM}{s.date}{RESET}  {bar}  "
@@ -124,7 +135,7 @@ def run(project: str | None = None):
         for s in sessions:
             d = s.date or "unknown"
             day_map[d]["tokens"] += s.total_usage.total
-            day_map[d]["gallons"] += _tokens_to_gallons(s.total_usage.total)
+            day_map[d]["gallons"] += _tokens_to_gallons(s.total_usage.total, optimist)
             day_map[d]["count"] += 1
 
         sorted_days = sorted(day_map.items())
@@ -144,10 +155,20 @@ def run(project: str | None = None):
     # ── Footer ────────────────────────────────────────────────────────────────
     print()
     print(rule())
+    if optimist:
+        rate_str = "~6,000 gal / 1B tokens"
+        rate_note = "H100-era efficient infra — lower bound"
+    else:
+        rate_str = "~22,500 gal / 1B tokens"
+        rate_note = "Li et al. 2023, UC Riverside — conservative baseline"
     print(
-        f"\n  {DIM}⚠  Estimate based on ~22,500 gal / 1B tokens (data center cooling research){RESET}"
+        f"\n  {DIM}⚠  Estimate: {rate_str}  ({rate_note}){RESET}"
     )
     print(
-        f"  {DIM}   Actual usage varies by provider, region, and cooling method.{RESET}"
+        f"  {DIM}   Source: arxiv.org/abs/2304.03271  ·  Actual varies by provider, region, cooling.{RESET}"
     )
+    if not optimist:
+        print(
+            f"  {DIM}   Run with --optimist for H100-era lower bound (~6,000 gal / 1B).{RESET}"
+        )
     print()
